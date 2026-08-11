@@ -12,7 +12,8 @@ export interface WorkflowEdge {
   id: string;
   source: string;
   target: string;
-  condition?: string; // Matching condition handle / path (e.g., "true", "false", "default")
+  condition?: string;
+  edgeType?: 'default' | 'confidence_threshold';
 }
 
 export interface WorkflowDefinition {
@@ -42,24 +43,35 @@ export interface ExecutionContext {
   workflowId: string;
   runId: string;
   initialInput: Record<string, any>;
-  nodeOutputs: Record<string, Record<string, any>>; // nodeId -> node output object
+  nodeOutputs: Record<string, Record<string, any>>;
 }
 
-// Node-Specific Configurations
+export interface WorkflowResumeState {
+  nodeOutputs: Record<string, Record<string, any>>;
+  completedNodeIds: string[];
+}
+
+export interface WorkflowExecutionOptions {
+  onStepComplete?: (step: RunStepResult) => Promise<void>;
+  resumeState?: WorkflowResumeState;
+}
+
 export interface LlmNodeConfig {
   prompt: string;
   model?: string;
   jsonOutput?: boolean;
   systemInstruction?: string;
-  /** @deprecated Use `prompt`. Kept for backward compatibility with older canvas saves. */
   systemPrompt?: string;
-  confidenceThreshold?: number; // e.g. 0.90 — triggers approval if AI confidence is below threshold
+  confidenceThreshold?: number;
+  enableTieredFallback?: boolean;
 }
 
 export interface ConditionNodeConfig {
-  field: string; // e.g. "llm_1.confidence" or "llm_1.category"
+  field: string;
   operator: 'equals' | 'not_equals' | 'greater_than' | 'less_than' | 'contains' | 'truthy';
   value?: any;
+  mode?: 'expression' | 'confidence_threshold';
+  threshold?: number;
 }
 
 export interface ActionNodeConfig {
@@ -76,7 +88,6 @@ export interface ApprovalNodeConfig {
   timeoutHours?: number;
 }
 
-// AI Abstraction Interfaces
 export interface AiOptions {
   model?: string;
   jsonOutput?: boolean;
@@ -94,7 +105,6 @@ export interface AiResponse {
   modelUsed: string;
 }
 
-// Human-in-the-Loop (HITL) Approvals
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 
 export interface ApprovalItem {
@@ -112,7 +122,6 @@ export interface ResolveApprovalDto {
   userFeedback?: string;
 }
 
-// Engine & Persistence DTOs
 export interface CreateWorkflowDto {
   name: string;
   definition: WorkflowDefinition;
@@ -167,4 +176,26 @@ export interface HealthCheckResponse {
   timestamp: string;
   postgres: 'connected' | 'disconnected';
   redis: 'connected' | 'disconnected';
+}
+
+export interface DashboardMetrics {
+  totalRuns: number;
+  successRate: number;
+  totalCostUsd: number;
+  avgLatencyMs: number;
+  pendingApprovals: number;
+  modelUsage: { flash: number; pro: number; other: number };
+  costOverTime: { date: string; costUsd: number }[];
+  runsByDay: { date: string; count: number }[];
+}
+
+export interface RecentRunItem {
+  id: string;
+  workflowId: string;
+  workflowName: string;
+  status: RunStatus;
+  startedAt: string;
+  finishedAt?: string | null;
+  totalCostUsd?: number | null;
+  totalLatencyMs?: number | null;
 }

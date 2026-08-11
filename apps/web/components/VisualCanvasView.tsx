@@ -1,413 +1,363 @@
 'use client';
 
-import React, { useState } from 'react';
-import { WorkflowDefinition, WorkflowNode, WorkflowEdge, NodeType } from '@repo/shared-types';
+import React, { useCallback, useEffect, useMemo } from 'react';
+import {
+  ReactFlow,
+  Background,
+  Controls,
+  MiniMap,
+  Connection,
+  Edge,
+  Node,
+  NodeTypes,
+  ReactFlowProvider,
+  useNodesState,
+  useEdgesState,
+  OnNodesChange,
+  OnEdgesChange,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
+
+import {
+  WorkflowDefinition,
+  WorkflowListItem,
+  WorkflowRunResponse,
+  NodeType,
+} from '@repo/shared-types';
+import { flowNodeTypes } from './flow/WorkflowFlowNode';
+import { NodeInspector } from './flow/NodeInspector';
+import {
+  definitionToFlow,
+  createNodeFromPalette,
+  createEdgeFromConnection,
+  WorkflowFlowNodeData,
+} from '../lib/flow-utils';
+
+const NODE_LIBRARY: { type: NodeType; label: string; icon: string; category: string }[] = [
+  { type: 'trigger', label: 'Webhook', icon: '⚡', category: 'TRIGGERS' },
+  { type: 'trigger', label: 'Schedule', icon: '⏰', category: 'TRIGGERS' },
+  { type: 'llm', label: 'Gemini LLM', icon: '🤖', category: 'AI' },
+  { type: 'condition', label: 'Condition', icon: '🔀', category: 'LOGIC' },
+  { type: 'action', label: 'HTTP Action', icon: '🌐', category: 'ACTIONS' },
+  { type: 'action', label: 'Log Action', icon: '📝', category: 'ACTIONS' },
+  { type: 'approval', label: 'Human Approval', icon: '🛡️', category: 'LOGIC' },
+];
 
 interface VisualCanvasViewProps {
-  onSave?: (def: WorkflowDefinition) => void;
-  onRun?: (def: WorkflowDefinition) => void;
+  definition: WorkflowDefinition;
+  savedWorkflowId: string | null;
+  workflows: WorkflowListItem[];
+  activeRun?: WorkflowRunResponse | null;
+  selectedNodeId: string | null;
+  onDefinitionChange: (def: WorkflowDefinition) => void;
+  onSelectedNodeIdChange: (id: string | null) => void;
+  onLoadWorkflow: (id: string) => void;
+  onNewWorkflow: () => void;
+  onSave: () => void;
+  onRun: () => void;
+  isSaving?: boolean;
+  isRunning?: boolean;
 }
 
-export const VisualCanvasView: React.FC<VisualCanvasViewProps> = ({ onSave, onRun }) => {
-  const [workflowName, setWorkflowName] = useState('Support Ticket Triage v1');
-  const [selectedNodeId, setSelectedNodeId] = useState<string>('classify_score');
-  const [searchQuery, setSearchQuery] = useState('');
+function VisualCanvasInner({
+  definition,
+  savedWorkflowId,
+  workflows,
+  activeRun,
+  selectedNodeId,
+  onDefinitionChange,
+  onSelectedNodeIdChange,
+  onLoadWorkflow,
+  onNewWorkflow,
+  onSave,
+  onRun,
+  isSaving,
+  isRunning,
+}: VisualCanvasViewProps) {
+  const [searchQuery, setSearchQuery] = React.useState('');
 
-  // Interactive Drag & Drop State
-  const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
-  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const { nodes: initialNodes, edges: initialEdges } = useMemo(
+    () => definitionToFlow(definition, activeRun, selectedNodeId),
+    [definition, activeRun, selectedNodeId],
+  );
 
-  const [nodes, setNodes] = useState<WorkflowNode[]>([
-    {
-      id: 'new_ticket',
-      type: 'trigger',
-      config: { source: 'zendesk_prod', title: 'New Ticket Intake' },
-      position: { x: 80, y: 140 },
-    },
-    {
-      id: 'classify_score',
-      type: 'llm',
-      config: {
-        model: 'gemini-2.5-flash',
-        title: 'Classify & Score',
-        prompt:
-          'You are an expert customer support triage agent. Classify the ticket urgency (urgent or normal) with a confidence score. Ticket: "{{input.ticket_text}}"',
-        jsonOutput: true,
-        systemInstruction:
-          'Return JSON with keys: category, confidence, summary, reasoning.',
-      },
-      position: { x: 440, y: 220 },
-    },
-  ]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node<WorkflowFlowNodeData>>(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
-  const [edges, setEdges] = useState<WorkflowEdge[]>([
-    { id: 'e1', source: 'new_ticket', target: 'classify_score' },
-  ]);
-
-  const selectedNode = nodes.find((n) => n.id === selectedNodeId);
-
-  // Dragging Handlers
-  const handleMouseDown = (e: React.MouseEvent, nodeId: string) => {
-    e.stopPropagation();
-    setSelectedNodeId(nodeId);
-    setDraggingNodeId(nodeId);
-
-    const targetNode = nodes.find((n) => n.id === nodeId);
-    if (targetNode) {
-      setDragOffset({
-        x: e.clientX - (targetNode.position?.x || 0),
-        y: e.clientY - (targetNode.position?.y || 0),
-      });
-    }
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!draggingNodeId) return;
-    const canvasRect = e.currentTarget.getBoundingClientRect();
-    const newX = Math.max(20, e.clientX - canvasRect.left - dragOffset.x + e.currentTarget.scrollLeft);
-    const newY = Math.max(20, e.clientY - canvasRect.top - dragOffset.y + e.currentTarget.scrollTop);
-
-    setNodes((prev) =>
-      prev.map((n) => (n.id === draggingNodeId ? { ...n, position: { x: newX, y: newY } } : n)),
+  useEffect(() => {
+    const { nodes: nextNodes, edges: nextEdges } = definitionToFlow(
+      definition,
+      activeRun,
+      selectedNodeId,
     );
-  };
+    setNodes(nextNodes);
+    setEdges(nextEdges);
+  }, [definition, activeRun, selectedNodeId, setNodes, setEdges]);
 
-  const handleMouseUp = () => {
-    setDraggingNodeId(null);
-  };
+  const handleNodesChange: OnNodesChange<Node<WorkflowFlowNodeData>> = useCallback(
+    (changes) => {
+      onNodesChange(changes);
+    },
+    [onNodesChange],
+  );
 
-  // Add Node dynamically from Palette
+  const onNodeDragStop = useCallback(
+    (_event: MouseEvent | TouchEvent, node: Node<WorkflowFlowNodeData>) => {
+      onDefinitionChange({
+        ...definition,
+        nodes: definition.nodes.map((n) =>
+          n.id === node.id ? { ...n, position: node.position } : n,
+        ),
+      });
+    },
+    [definition, onDefinitionChange],
+  );
+
+  const onNodesDelete = useCallback(
+    (deleted: Node<WorkflowFlowNodeData>[]) => {
+      const ids = new Set(deleted.map((n) => n.id));
+      onDefinitionChange({
+        ...definition,
+        nodes: definition.nodes.filter((n) => !ids.has(n.id)),
+        edges: definition.edges.filter((e) => !ids.has(e.source) && !ids.has(e.target)),
+      });
+      if (selectedNodeId && ids.has(selectedNodeId)) {
+        onSelectedNodeIdChange(null);
+      }
+    },
+    [definition, onDefinitionChange, selectedNodeId, onSelectedNodeIdChange],
+  );
+
+  const handleEdgesChange: OnEdgesChange = useCallback(
+    (changes) => {
+      onEdgesChange(changes);
+      const removed = changes.filter((c) => c.type === 'remove').map((c) => c.id);
+      if (removed.length > 0) {
+        onDefinitionChange({
+          ...definition,
+          edges: definition.edges.filter((e) => !removed.includes(e.id)),
+        });
+      }
+    },
+    [onEdgesChange, definition, onDefinitionChange],
+  );
+
+  const onConnect = useCallback(
+    (connection: Connection) => {
+      if (!connection.source || !connection.target) return;
+      const sourceNode = definition.nodes.find((n) => n.id === connection.source);
+      const newEdge = createEdgeFromConnection(
+        connection.source,
+        connection.target,
+        connection.sourceHandle,
+        sourceNode?.type,
+      );
+      onDefinitionChange({
+        ...definition,
+        edges: [...definition.edges, newEdge],
+      });
+    },
+    [definition, onDefinitionChange],
+  );
+
   const addNodeFromLibrary = (type: NodeType, label: string) => {
-    const id = `${type}_${Date.now().toString().slice(-4)}`;
-    const newNode: WorkflowNode = {
-      id,
-      type,
-      config: {
-        title: label,
-        model: type === 'llm' ? 'gemini-2.5-flash' : undefined,
-        source: type === 'trigger' ? 'webhook_api' : undefined,
-        prompt: type === 'llm' ? 'Process and analyze input payload.' : undefined,
-        jsonOutput: type === 'llm' ? true : undefined,
-      },
-      position: { x: 200 + nodes.length * 60, y: 150 + (nodes.length % 3) * 50 },
-    };
-
-    setNodes((prev) => [...prev, newNode]);
-    setSelectedNodeId(id);
-
-    // Automatically connect to the last node
-    if (nodes.length > 0) {
-      const lastNodeId = nodes[nodes.length - 1].id;
-      setEdges((prev) => [...prev, { id: `e_${Date.now()}`, source: lastNodeId, target: id }]);
-    }
+    const newNode = createNodeFromPalette(type, label, definition.nodes.length);
+    onDefinitionChange({
+      ...definition,
+      nodes: [...definition.nodes, newNode],
+    });
+    onSelectedNodeIdChange(newNode.id);
   };
 
-  const updateSelectedNodeConfig = (key: string, value: any) => {
-    setNodes((prev) =>
-      prev.map((n) =>
+  const deleteSelectedNode = () => {
+    if (!selectedNodeId) return;
+    onDefinitionChange({
+      ...definition,
+      nodes: definition.nodes.filter((n) => n.id !== selectedNodeId),
+      edges: definition.edges.filter(
+        (e) => e.source !== selectedNodeId && e.target !== selectedNodeId,
+      ),
+    });
+    onSelectedNodeIdChange(null);
+  };
+
+  const updateNodeConfig = (key: string, value: unknown) => {
+    if (!selectedNodeId) return;
+    onDefinitionChange({
+      ...definition,
+      nodes: definition.nodes.map((n) =>
         n.id === selectedNodeId ? { ...n, config: { ...n.config, [key]: value } } : n,
       ),
-    );
+    });
   };
 
-  const deleteNode = (nodeId: string) => {
-    setNodes((prev) => prev.filter((n) => n.id !== nodeId));
-    setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
-    if (selectedNodeId === nodeId) setSelectedNodeId('');
-  };
+  const selectedNode = definition.nodes.find((n) => n.id === selectedNodeId);
 
-  const getWorkflowDef = (): WorkflowDefinition => ({
-    id: 'wf-triage-v1',
-    name: workflowName,
-    nodes,
-    edges,
-  });
+  const filteredLibrary = NODE_LIBRARY.filter(
+    (item) =>
+      !searchQuery ||
+      item.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.category.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
+  const categories = [...new Set(filteredLibrary.map((i) => i.category))];
 
   return (
     <div className="flex-1 flex flex-col h-[calc(100vh-65px)] overflow-hidden bg-[#FAF7F2]">
-      {/* Canvas Header Sub-Bar */}
-      <div className="h-14 bg-[#FFFFFF] border-b border-[#EAE4D9] px-6 flex justify-between items-center z-10 select-none">
-        <div className="flex items-center gap-3">
+      <div className="h-14 bg-[#FFFFFF] border-b border-[#EAE4D9] px-6 flex justify-between items-center z-10 gap-4">
+        <div className="flex items-center gap-3 min-w-0">
           <input
             type="text"
-            value={workflowName}
-            onChange={(e) => setWorkflowName(e.target.value)}
+            value={definition.name}
+            onChange={(e) => onDefinitionChange({ ...definition, name: e.target.value })}
             className="font-serif font-semibold text-lg text-[#2C2622] bg-transparent focus:outline-none focus:border-b border-[#C86D3B]"
           />
-          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-[#F7F2EA] text-[#8C827A] border border-[#EAE4D9]">
-            DRAFT
+          <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-[#F7F2EA] text-[#8C827A] border border-[#EAE4D9] shrink-0">
+            {savedWorkflowId ? 'SAVED' : 'DRAFT'}
           </span>
+          {activeRun && (activeRun.status === 'running' || activeRun.status === 'pending') && (
+            <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-[#FEF4EC] text-[#C86D3B] border border-[#FADCC7] animate-pulse shrink-0">
+              LIVE RUN
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center gap-3">
-          <button className="p-2 text-[#786E65] hover:text-[#2C2622]">⚙️</button>
-          <button className="p-2 text-[#786E65] hover:text-[#2C2622]">🔗</button>
-          <button
-            onClick={() => onSave?.(getWorkflowDef())}
-            className="px-4 py-2 text-xs font-semibold text-[#2C2622] bg-[#FFFFFF] border border-[#EAE4D9] hover:bg-[#FAF7F2] rounded-lg transition-all shadow-sm"
+        <div className="flex items-center gap-2 shrink-0">
+          <select
+            value={savedWorkflowId ?? ''}
+            onChange={(e) => (e.target.value ? onLoadWorkflow(e.target.value) : onNewWorkflow())}
+            className="text-xs bg-[#FAF7F2] border border-[#EAE4D9] rounded-lg px-3 py-2 max-w-[180px]"
           >
-            Save
+            <option value="">— Load —</option>
+            {workflows.map((wf) => (
+              <option key={wf.id} value={wf.id}>
+                {wf.name}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={onNewWorkflow}
+            className="px-3 py-2 text-xs font-semibold border border-[#EAE4D9] rounded-lg hover:bg-[#FAF7F2]"
+          >
+            New
           </button>
           <button
-            onClick={() => onRun?.(getWorkflowDef())}
-            className="px-5 py-2 text-xs font-bold text-white bg-[#C86D3B] hover:bg-[#B05B2A] rounded-lg shadow-sm transition-all flex items-center gap-1.5"
+            onClick={onSave}
+            disabled={isSaving || isRunning}
+            className="px-4 py-2 text-xs font-semibold border border-[#EAE4D9] rounded-lg disabled:opacity-50"
           >
-            ► Run Workflow
+            {isSaving ? 'Saving…' : 'Save'}
+          </button>
+          <button
+            onClick={onRun}
+            disabled={isSaving || isRunning}
+            className="px-5 py-2 text-xs font-bold text-white bg-[#C86D3B] hover:bg-[#B05B2A] rounded-lg disabled:opacity-50"
+          >
+            {isRunning ? 'Starting…' : '► Run'}
           </button>
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden relative">
-        {/* Left Node Library Sidebar */}
-        <div className="w-64 bg-[#FFFFFF] border-r border-[#EAE4D9] p-5 space-y-6 flex flex-col z-10 select-none">
+      <div className="flex-1 flex overflow-hidden">
+        <div className="w-60 bg-[#FFFFFF] border-r border-[#EAE4D9] p-4 space-y-4 overflow-y-auto shrink-0">
           <div>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[#8C827A] block mb-2">
-              NODE LIBRARY
+            <span className="text-[10px] font-bold uppercase text-[#8C827A] block mb-2">
+              Node Palette
             </span>
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Search nodes..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-[#FAF7F2] border border-[#EAE4D9] text-xs text-[#2C2622] px-3 py-2 rounded-xl focus:outline-none focus:border-[#C86D3B]"
-              />
-            </div>
+            <input
+              type="text"
+              placeholder="Search…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full text-xs bg-[#FAF7F2] border border-[#EAE4D9] rounded-lg px-3 py-2"
+            />
           </div>
-
-          <div className="space-y-4">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#8C827A] block mb-2">
-                TRIGGERS
-              </span>
-              <div className="space-y-2">
-                <button
-                  onClick={() => addNodeFromLibrary('trigger', 'Webhook Intake')}
-                  className="w-full p-3 bg-[#FAF7F2] border border-[#EAE4D9] rounded-xl flex items-center justify-between text-xs font-semibold text-[#2C2622] hover:border-[#C86D3B] hover:bg-[#FEF4EC] transition-all text-left"
-                >
-                  <span className="flex items-center gap-2">
-                    <span className="text-amber-600">⚡</span> Webhook
-                  </span>
-                  <span className="text-[#C86D3B] font-bold">+</span>
-                </button>
-                <button
-                  onClick={() => addNodeFromLibrary('trigger', 'Schedule Cron')}
-                  className="w-full p-3 bg-[#FAF7F2] border border-[#EAE4D9] rounded-xl flex items-center justify-between text-xs font-semibold text-[#2C2622] hover:border-[#C86D3B] hover:bg-[#FEF4EC] transition-all text-left"
-                >
-                  <span className="flex items-center gap-2">
-                    <span className="text-amber-600">⏰</span> Schedule
-                  </span>
-                  <span className="text-[#C86D3B] font-bold">+</span>
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#8C827A] block mb-2">
-                AI MODELS
-              </span>
-              <div className="space-y-2">
-                <button
-                  onClick={() => addNodeFromLibrary('llm', 'Gemini LLM')}
-                  className="w-full p-3 bg-[#FAF7F2] border border-[#EAE4D9] rounded-xl flex items-center justify-between text-xs font-semibold text-[#2C2622] hover:border-[#C86D3B] hover:bg-[#FEF4EC] transition-all text-left"
-                >
-                  <span className="flex items-center gap-2">
-                    <span className="text-[#C86D3B]">🤖</span> LLM Node
-                  </span>
-                  <span className="text-[#C86D3B] font-bold">+</span>
-                </button>
-                <button
-                  onClick={() => addNodeFromLibrary('action', 'Embeddings Generator')}
-                  className="w-full p-3 bg-[#FAF7F2] border border-[#EAE4D9] rounded-xl flex items-center justify-between text-xs font-semibold text-[#2C2622] hover:border-[#C86D3B] hover:bg-[#FEF4EC] transition-all text-left"
-                >
-                  <span className="flex items-center gap-2">
-                    <span className="text-[#C86D3B]">🔤</span> Embeddings
-                  </span>
-                  <span className="text-[#C86D3B] font-bold">+</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Center Interactive Drag Canvas */}
-        <div
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-          className="flex-1 bg-dots bg-[#FAF7F2] relative overflow-auto p-12 select-none cursor-crosshair"
-        >
-          <div className="relative w-full h-full min-w-[1000px] min-h-[600px]">
-            {/* Dynamic SVG Connector Curves */}
-            <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
-              {edges.map((edge) => {
-                const sourceNode = nodes.find((n) => n.id === edge.source);
-                const targetNode = nodes.find((n) => n.id === edge.target);
-                if (!sourceNode || !targetNode) return null;
-
-                const x1 = (sourceNode.position?.x || 0) + 220;
-                const y1 = (sourceNode.position?.y || 0) + 40;
-                const x2 = targetNode.position?.x || 0;
-                const y2 = (targetNode.position?.y || 0) + 40;
-                const midX = (x1 + x2) / 2;
-
-                return (
-                  <g key={edge.id}>
-                    <path
-                      d={`M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`}
-                      fill="none"
-                      stroke="#A89F91"
-                      strokeWidth="2.5"
-                    />
-                    <circle cx={x1} cy={y1} r="4" fill="#FFFFFF" stroke="#A89F91" strokeWidth="2" />
-                    <circle cx={x2} cy={y2} r="4" fill="#C86D3B" stroke="#FFFFFF" strokeWidth="2" />
-                  </g>
-                );
-              })}
-            </svg>
-
-            {/* Render Draggable Nodes */}
-            {nodes.map((node) => {
-              const isSelected = node.id === selectedNodeId;
-
-              return (
-                <div
-                  key={node.id}
-                  onMouseDown={(e) => handleMouseDown(e, node.id)}
-                  style={{
-                    left: `${node.position?.x || 50}px`,
-                    top: `${node.position?.y || 150}px`,
-                  }}
-                  className={`absolute w-56 p-4 bg-[#FFFFFF] rounded-2xl border shadow-md transition-shadow cursor-grab active:cursor-grabbing z-10 ${
-                    isSelected
-                      ? 'border-[#C86D3B] ring-2 ring-[#C86D3B]/20 shadow-lg'
-                      : 'border-[#EAE4D9] hover:border-[#A89F91]'
-                  }`}
-                >
-                  <div className="flex items-center justify-between text-xs font-bold text-[#2C2622] mb-1">
-                    <span className="flex items-center gap-2">
-                      <span>
-                        {node.type === 'trigger' && '⚡'}
-                        {node.type === 'llm' && '🤖'}
-                        {node.type === 'action' && '🔤'}
-                        {node.type === 'condition' && '🔀'}
-                        {node.type === 'approval' && '🛡️'}
-                      </span>
-                      {node.config?.title || node.id}
-                    </span>
+          {categories.map((cat) => (
+            <div key={cat}>
+              <span className="text-[9px] font-bold uppercase text-[#8C827A]">{cat}</span>
+              <div className="mt-1 space-y-1">
+                {filteredLibrary
+                  .filter((i) => i.category === cat)
+                  .map((item) => (
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteNode(node.id);
-                      }}
-                      className="text-[#8C827A] hover:text-rose-600 font-bold p-1 text-xs"
-                      title="Delete Node"
+                      key={`${item.type}-${item.label}`}
+                      onClick={() => addNodeFromLibrary(item.type, item.label)}
+                      className="w-full p-2.5 text-left text-xs font-semibold bg-[#FAF7F2] border border-[#EAE4D9] rounded-lg hover:border-[#C86D3B] flex justify-between"
                     >
-                      ✕
+                      <span>
+                        {item.icon} {item.label}
+                      </span>
+                      <span className="text-[#C86D3B]">+</span>
                     </button>
-                  </div>
-
-                  {node.type === 'trigger' && (
-                    <p className="text-[11px] text-[#786E65] font-mono mt-1">
-                      source: {node.config?.source || 'zendesk_prod'}
-                    </p>
-                  )}
-
-                  {node.type === 'llm' && (
-                    <div className="mt-2 pt-2 border-t border-[#F7F2EA] text-[10px]">
-                      <span className="text-[#8C827A] uppercase font-bold block mb-0.5">MODEL</span>
-                      <span className="text-[#2C2622] font-semibold">{node.config?.model || 'gemini-2.5-flash'}</span>
-                    </div>
-                  )}
-
-                  {/* Right Output Handle Point */}
-                  <div className="absolute right-[-6px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#FFFFFF] border-2 border-[#A89F91]" />
-                  {/* Left Input Handle Point */}
-                  <div className="absolute left-[-6px] top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#C86D3B] border-2 border-[#FFFFFF]" />
-                </div>
-              );
-            })}
-          </div>
+                  ))}
+              </div>
+            </div>
+          ))}
+          <p className="text-[10px] text-[#786E65] pt-2 border-t border-[#EAE4D9]">
+            Drag from handles to wire nodes. Condition nodes have true/false outputs.
+          </p>
         </div>
 
-        {/* Right Inspector Panel */}
-        {selectedNode && (
-          <div className="w-80 bg-[#FFFFFF] border-l border-[#EAE4D9] p-6 space-y-6 overflow-y-auto z-10 shadow-lg">
-            <div className="flex justify-between items-center border-b border-[#EAE4D9] pb-4">
-              <h3 className="font-serif font-bold text-lg text-[#2C2622] flex items-center gap-2">
-                <span className="text-[#C86D3B]">
-                  {selectedNode.type === 'llm' ? '🤖' : '⚡'}
-                </span>
-                {selectedNode.config?.title || selectedNode.id}
-              </h3>
+        <div className="flex-1 relative">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={handleNodesChange}
+            onEdgesChange={handleEdgesChange}
+            onConnect={onConnect}
+            onNodeDragStop={onNodeDragStop}
+            onNodesDelete={onNodesDelete}
+            onNodeClick={(_, node) => onSelectedNodeIdChange(node.id)}
+            onPaneClick={() => onSelectedNodeIdChange(null)}
+            nodeTypes={flowNodeTypes as NodeTypes}
+            fitView
+            deleteKeyCode={['Backspace', 'Delete']}
+            className="bg-[#FAF7F2]"
+          >
+            <Background gap={20} size={1} color="#EAE4D9" />
+            <Controls className="!bg-white !border-[#EAE4D9] !shadow-sm" />
+            <MiniMap
+              nodeColor={(n) => {
+                const status = (n.data as WorkflowFlowNodeData)?.runStatus;
+                if (status === 'success') return '#10b981';
+                if (status === 'failed') return '#f43f5e';
+                if (status === 'running') return '#C86D3B';
+                return '#EAE4D9';
+              }}
+              className="!bg-white !border-[#EAE4D9]"
+            />
+          </ReactFlow>
+        </div>
+
+        {selectedNode ? (
+          <div className="flex flex-col shrink-0">
+            <div className="bg-[#FFFFFF] border-l border-b border-[#EAE4D9] px-4 py-2 flex justify-end">
               <button
-                onClick={() => setSelectedNodeId('')}
-                className="text-[#8C827A] hover:text-[#2C2622] text-sm font-bold"
+                onClick={deleteSelectedNode}
+                className="text-[10px] font-bold text-rose-600 hover:text-rose-700"
               >
-                ✕
+                Delete Node
               </button>
             </div>
-
-            <div className="space-y-5 text-xs">
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-[#8C827A] block mb-2">
-                  NODE TITLE
-                </label>
-                <input
-                  type="text"
-                  value={selectedNode.config?.title || ''}
-                  onChange={(e) => updateSelectedNodeConfig('title', e.target.value)}
-                  className="w-full bg-[#FAF7F2] border border-[#EAE4D9] text-[#2C2622] p-3 rounded-xl font-medium focus:outline-none focus:border-[#C86D3B]"
-                />
-              </div>
-
-              {selectedNode.type === 'llm' && (
-                <>
-                  <div>
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-[#8C827A] block mb-2">
-                      MODEL SELECTION
-                    </label>
-                    <select
-                      value={selectedNode.config.model || 'gemini-2.5-flash'}
-                      onChange={(e) => updateSelectedNodeConfig('model', e.target.value)}
-                      className="w-full bg-[#FAF7F2] border border-[#EAE4D9] text-[#2C2622] p-3 rounded-xl font-medium focus:outline-none focus:border-[#C86D3B]"
-                    >
-                      <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                      <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-[#8C827A] block mb-2">
-                      PROMPT TEMPLATE
-                    </label>
-                    <textarea
-                      rows={6}
-                      value={selectedNode.config.prompt || selectedNode.config.systemPrompt || ''}
-                      onChange={(e) => updateSelectedNodeConfig('prompt', e.target.value)}
-                      className="w-full bg-[#FAF7F2] border border-[#EAE4D9] text-[#2C2622] font-mono text-[11px] p-3 rounded-xl focus:outline-none focus:border-[#C86D3B]"
-                    />
-                  </div>
-                </>
-              )}
-
-              {selectedNode.type === 'trigger' && (
-                <div>
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-[#8C827A] block mb-2">
-                    TRIGGER SOURCE
-                  </label>
-                  <input
-                    type="text"
-                    value={selectedNode.config?.source || ''}
-                    onChange={(e) => updateSelectedNodeConfig('source', e.target.value)}
-                    className="w-full bg-[#FAF7F2] border border-[#EAE4D9] text-[#2C2622] p-3 rounded-xl font-mono text-xs focus:outline-none focus:border-[#C86D3B]"
-                  />
-                </div>
-              )}
-            </div>
+            <NodeInspector
+              node={selectedNode}
+              onUpdateConfig={updateNodeConfig}
+              onClose={() => onSelectedNodeIdChange(null)}
+            />
+          </div>
+        ) : (
+          <div className="w-80 bg-[#FFFFFF] border-l border-[#EAE4D9] p-6 flex items-center justify-center text-center shrink-0">
+            <p className="text-xs text-[#786E65]">
+              Select a node to configure it, or drag handles to connect nodes.
+            </p>
           </div>
         )}
       </div>
     </div>
   );
-};
+}
+
+export const VisualCanvasView: React.FC<VisualCanvasViewProps> = (props) => (
+  <ReactFlowProvider>
+    <VisualCanvasInner {...props} />
+  </ReactFlowProvider>
+);
