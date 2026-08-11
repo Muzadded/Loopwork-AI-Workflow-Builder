@@ -51,6 +51,8 @@ export interface LlmNodeConfig {
   model?: string;
   jsonOutput?: boolean;
   systemInstruction?: string;
+  /** @deprecated Use `prompt`. Kept for backward compatibility with older canvas saves. */
+  systemPrompt?: string;
   confidenceThreshold?: number; // e.g. 0.90 — triggers approval if AI confidence is below threshold
 }
 

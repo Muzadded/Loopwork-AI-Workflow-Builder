@@ -85,7 +85,7 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
       await this.runsService.updateRunStatus(runId, 'running');
 
       // 3. Execute Workflow DAG
-      const result = await this.engineService.executeWorkflow(workflow.definition, initialInput);
+      const result = await this.engineService.executeWorkflow(workflow.definition, initialInput, runId);
 
       // 4. Persist individual step results in database
       for (const step of result.executionTrace) {

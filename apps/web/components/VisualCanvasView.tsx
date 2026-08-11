@@ -28,10 +28,13 @@ export const VisualCanvasView: React.FC<VisualCanvasViewProps> = ({ onSave, onRu
       id: 'classify_score',
       type: 'llm',
       config: {
-        model: 'Gemini 1.5 Pro',
+        model: 'gemini-2.5-flash',
         title: 'Classify & Score',
-        systemPrompt:
-          'You are an expert customer support triage agent. Analyze the incoming ticket and categorize it.',
+        prompt:
+          'You are an expert customer support triage agent. Classify the ticket urgency (urgent or normal) with a confidence score. Ticket: "{{input.ticket_text}}"',
+        jsonOutput: true,
+        systemInstruction:
+          'Return JSON with keys: category, confidence, summary, reasoning.',
       },
       position: { x: 440, y: 220 },
     },
@@ -81,9 +84,10 @@ export const VisualCanvasView: React.FC<VisualCanvasViewProps> = ({ onSave, onRu
       type,
       config: {
         title: label,
-        model: type === 'llm' ? 'Gemini 1.5 Pro' : undefined,
+        model: type === 'llm' ? 'gemini-2.5-flash' : undefined,
         source: type === 'trigger' ? 'webhook_api' : undefined,
-        systemPrompt: type === 'llm' ? 'Process and analyze input payload.' : undefined,
+        prompt: type === 'llm' ? 'Process and analyze input payload.' : undefined,
+        jsonOutput: type === 'llm' ? true : undefined,
       },
       position: { x: 200 + nodes.length * 60, y: 150 + (nodes.length % 3) * 50 },
     };
@@ -312,7 +316,7 @@ export const VisualCanvasView: React.FC<VisualCanvasViewProps> = ({ onSave, onRu
                   {node.type === 'llm' && (
                     <div className="mt-2 pt-2 border-t border-[#F7F2EA] text-[10px]">
                       <span className="text-[#8C827A] uppercase font-bold block mb-0.5">MODEL</span>
-                      <span className="text-[#2C2622] font-semibold">{node.config?.model || 'Gemini 1.5 Pro'}</span>
+                      <span className="text-[#2C2622] font-semibold">{node.config?.model || 'gemini-2.5-flash'}</span>
                     </div>
                   )}
 
@@ -364,23 +368,23 @@ export const VisualCanvasView: React.FC<VisualCanvasViewProps> = ({ onSave, onRu
                       MODEL SELECTION
                     </label>
                     <select
-                      value={selectedNode.config.model || 'Gemini 1.5 Pro'}
+                      value={selectedNode.config.model || 'gemini-2.5-flash'}
                       onChange={(e) => updateSelectedNodeConfig('model', e.target.value)}
                       className="w-full bg-[#FAF7F2] border border-[#EAE4D9] text-[#2C2622] p-3 rounded-xl font-medium focus:outline-none focus:border-[#C86D3B]"
                     >
-                      <option value="Gemini 1.5 Pro">Gemini 1.5 Pro</option>
-                      <option value="Gemini 2.5 Flash">Gemini 2.5 Flash</option>
+                      <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                      <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
                     </select>
                   </div>
 
                   <div>
                     <label className="text-[10px] font-bold uppercase tracking-wider text-[#8C827A] block mb-2">
-                      SYSTEM PROMPT
+                      PROMPT TEMPLATE
                     </label>
                     <textarea
                       rows={6}
-                      value={selectedNode.config.systemPrompt || ''}
-                      onChange={(e) => updateSelectedNodeConfig('systemPrompt', e.target.value)}
+                      value={selectedNode.config.prompt || selectedNode.config.systemPrompt || ''}
+                      onChange={(e) => updateSelectedNodeConfig('prompt', e.target.value)}
                       className="w-full bg-[#FAF7F2] border border-[#EAE4D9] text-[#2C2622] font-mono text-[11px] p-3 rounded-xl focus:outline-none focus:border-[#C86D3B]"
                     />
                   </div>

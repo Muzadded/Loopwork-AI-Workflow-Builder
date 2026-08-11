@@ -33,7 +33,7 @@ export class ActionNodeExecutor implements INodeExecutor {
         
         // Mock / actual fetch side effect
         let fetchResult = { status: 200, statusText: 'OK', sentPayload: interpolatedBody };
-        if (config.url.startsWith('http')) {
+        if (interpolatedUrl.startsWith('http')) {
           const response = await fetch(interpolatedUrl, {
             method,
             headers: { 'Content-Type': 'application/json', ...config.headers },
@@ -69,7 +69,7 @@ export class ActionNodeExecutor implements INodeExecutor {
       timestamp: new Date().toISOString(),
       nodeId: node.id,
       executedAction: 'CONSOLE_LOG',
-      contextData: context.nodeOutputs,
+      contextData: { ...context.nodeOutputs },
     };
     this.logger.log(`Action Node [${node.id}] Logged Output: ${JSON.stringify(logData)}`);
 

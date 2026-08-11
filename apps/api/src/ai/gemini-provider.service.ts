@@ -3,75 +3,114 @@ import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { IAiProvider } from './ai-provider.interface';
 import { AiOptions, AiResponse } from '@repo/shared-types';
+import { normalizeGeminiModel } from '../engine/utils/model-normalizer';
+
+const PLACEHOLDER_KEYS = new Set([
+  'your_key_here',
+  'your_gemini_api_key_here',
+  'mock_gemini_key_for_dev',
+]);
 
 @Injectable()
 export class GeminiProviderService implements IAiProvider {
   private readonly logger = new Logger(GeminiProviderService.name);
   private genAI: GoogleGenerativeAI | null = null;
+  private readonly mockModeEnabled: boolean;
 
   constructor(private readonly configService: ConfigService) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
-    if (apiKey && apiKey !== 'your_key_here' && apiKey !== 'your_gemini_api_key_here' && apiKey !== 'mock_gemini_key_for_dev') {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const allowMock = this.configService.get<string>('GEMINI_MOCK') === 'true';
+    const hasRealKey = Boolean(apiKey && !PLACEHOLDER_KEYS.has(apiKey));
+
+    this.mockModeEnabled = !isProduction && (allowMock || !hasRealKey);
+
+    if (hasRealKey) {
       try {
-        this.genAI = new GoogleGenerativeAI(apiKey);
+        this.genAI = new GoogleGenerativeAI(apiKey!);
         this.logger.log('Initialized Google Gemini AI SDK provider');
       } catch (err) {
         this.logger.warn(`Failed to initialize GoogleGenerativeAI: ${err}`);
       }
+    } else if (this.mockModeEnabled) {
+      this.logger.log('GEMINI_API_KEY not configured — using development mock responses');
     } else {
-      this.logger.log('No production GEMINI_API_KEY configured. Running GeminiProviderService with intelligent development fallback mode.');
+      this.logger.error('GEMINI_API_KEY is required in production');
     }
   }
 
   async complete(prompt: string, options: AiOptions = {}): Promise<AiResponse> {
-    const startTime = Date.now();
-    const modelName = options.model || 'gemini-2.5-flash';
+    const modelName = normalizeGeminiModel(options.model);
 
     if (this.genAI) {
       try {
-        const model = this.genAI.getGenerativeModel({
-          model: modelName,
-          systemInstruction: options.systemInstruction,
-          generationConfig: options.jsonOutput
-            ? { responseMimeType: 'application/json' }
-            : undefined,
-        });
-
-        const result = await model.generateContent(prompt);
-        const responseText = result.response.text();
-        const usage = result.response.usageMetadata;
-
-        const promptTokens = usage?.promptTokenCount || Math.ceil(prompt.length / 4);
-        const candidateTokens = usage?.candidatesTokenCount || Math.ceil(responseText.length / 4);
-        const totalTokens = promptTokens + candidateTokens;
-
-        // Pricing estimate (Flash model rate)
-        const costUsd = (promptTokens * 0.000000075) + (candidateTokens * 0.0000003);
-
-        let parsedJson: Record<string, any> | undefined;
-        if (options.jsonOutput) {
-          try {
-            parsedJson = JSON.parse(responseText);
-          } catch {
-            this.logger.warn('Failed to parse JSON response from Gemini model');
-          }
-        }
-
-        return {
-          text: responseText,
-          json: parsedJson,
-          tokensUsed: totalTokens,
-          promptTokens,
-          candidateTokens,
-          costUsd,
-          modelUsed: modelName,
-        };
+        return await this.callGeminiApi(prompt, modelName, options);
       } catch (err) {
-        this.logger.warn(`Gemini API call failed (${err instanceof Error ? err.message : err}). Escalating/falling back to dev mock execution.`);
+        const message = err instanceof Error ? err.message : String(err);
+        if (!this.mockModeEnabled) {
+          throw new Error(`Gemini API call failed: ${message}`);
+        }
+        this.logger.warn(`Gemini API call failed (${message}). Falling back to dev mock.`);
       }
     }
 
-    // Development Mock Logic (Intelligent Mocking for Testing Workflow Traces)
+    if (!this.mockModeEnabled) {
+      throw new Error(
+        'Gemini provider is not configured. Set GEMINI_API_KEY or enable GEMINI_MOCK=true in development.',
+      );
+    }
+
+    return this.completeWithMock(prompt, modelName, options);
+  }
+
+  private async callGeminiApi(
+    prompt: string,
+    modelName: string,
+    options: AiOptions,
+  ): Promise<AiResponse> {
+    const model = this.genAI!.getGenerativeModel({
+      model: modelName,
+      systemInstruction: options.systemInstruction,
+      generationConfig: options.jsonOutput
+        ? { responseMimeType: 'application/json' }
+        : undefined,
+    });
+
+    const result = await model.generateContent(prompt);
+    const responseText = result.response.text();
+    const usage = result.response.usageMetadata;
+
+    const promptTokens = usage?.promptTokenCount || Math.ceil(prompt.length / 4);
+    const candidateTokens = usage?.candidatesTokenCount || Math.ceil(responseText.length / 4);
+    const totalTokens = promptTokens + candidateTokens;
+
+    const costUsd = promptTokens * 0.000000075 + candidateTokens * 0.0000003;
+
+    let parsedJson: Record<string, any> | undefined;
+    if (options.jsonOutput) {
+      try {
+        parsedJson = JSON.parse(responseText);
+      } catch {
+        this.logger.warn('Failed to parse JSON response from Gemini model');
+      }
+    }
+
+    return {
+      text: responseText,
+      json: parsedJson,
+      tokensUsed: totalTokens,
+      promptTokens,
+      candidateTokens,
+      costUsd,
+      modelUsed: modelName,
+    };
+  }
+
+  private async completeWithMock(
+    prompt: string,
+    modelName: string,
+    options: AiOptions,
+  ): Promise<AiResponse> {
     const promptLower = prompt.toLowerCase();
     const mockLatency = 150;
     await new Promise((r) => setTimeout(r, mockLatency));
@@ -80,12 +119,17 @@ export class GeminiProviderService implements IAiProvider {
     let mockJson: Record<string, any> = { result: 'processed', confidence: 0.95 };
 
     if (promptLower.includes('urgency') || promptLower.includes('ticket') || promptLower.includes('classify')) {
-      const isUrgent = promptLower.includes('urgent') || promptLower.includes('critical') || promptLower.includes('error') || promptLower.includes('fail');
+      const isUrgent =
+        promptLower.includes('urgent') ||
+        promptLower.includes('critical') ||
+        promptLower.includes('error') ||
+        promptLower.includes('fail') ||
+        promptLower.includes('outage');
       mockJson = {
         category: isUrgent ? 'urgent' : 'normal',
         confidence: isUrgent ? 0.92 : 0.88,
         summary: `Classified ticket as ${isUrgent ? 'urgent' : 'normal'}.`,
-        reasoning: `Extracted key priority flags from input text.`,
+        reasoning: 'Extracted key priority flags from input text.',
       };
       mockText = JSON.stringify(mockJson);
     } else if (promptLower.includes('summary') || promptLower.includes('summarize')) {

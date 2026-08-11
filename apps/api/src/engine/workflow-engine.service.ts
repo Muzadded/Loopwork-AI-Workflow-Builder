@@ -76,20 +76,22 @@ export class WorkflowEngineService {
 
   /**
    * Executes a workflow DAG step by step.
+   * @param runId Optional DB-assigned run ID. When omitted, a new UUID is generated (test-run only).
    */
   async executeWorkflow(
     definition: WorkflowDefinition,
     initialInput: Record<string, any> = {},
+    runId?: string,
   ): Promise<EngineTestRunResponse> {
     const startTime = Date.now();
-    const runId = randomUUID();
+    const effectiveRunId = runId ?? randomUUID();
 
-    this.logger.log(`Starting Workflow Run [${runId}] for Workflow "${definition.name}" (${definition.nodes.length} nodes)`);
+    this.logger.log(`Starting Workflow Run [${effectiveRunId}] for Workflow "${definition.name}" (${definition.nodes.length} nodes)`);
 
     const sortedNodes = this.topologicalSort(definition);
     const context: ExecutionContext = {
       workflowId: definition.id,
-      runId,
+      runId: effectiveRunId,
       initialInput,
       nodeOutputs: {},
     };
@@ -116,7 +118,7 @@ export class WorkflowEngineService {
 
         if (stepResult.status === 'failed') {
           overallStatus = 'failed';
-          this.logger.error(`Workflow Run [${runId}] failed at node [${node.id}]`);
+          this.logger.error(`Workflow Run [${effectiveRunId}] failed at node [${node.id}]`);
           break;
         }
 
@@ -138,12 +140,12 @@ export class WorkflowEngineService {
         if (isApprovalNode || lowConfidence) {
           overallStatus = 'awaiting_approval';
           this.logger.warn(
-            `Workflow Run [${runId}] paused at node [${node.id}] - ${
+            `Workflow Run [${effectiveRunId}] paused at node [${node.id}] - ${
               isApprovalNode ? 'Explicit Approval Node reached' : `Low AI confidence score (${stepResult.output?.confidence})`
             }`,
           );
 
-          await this.approvalsService.createApproval(runId, node.id, {
+          await this.approvalsService.createApproval(effectiveRunId, node.id, {
             stepResult,
             nodeOutputs: context.nodeOutputs,
             reason: isApprovalNode ? 'Manual approval step' : 'Low AI confidence score below threshold',
@@ -182,10 +184,10 @@ export class WorkflowEngineService {
     }
 
     const totalLatency = Date.now() - startTime;
-    this.logger.log(`Workflow Run [${runId}] finished with status "${overallStatus}" in ${totalLatency}ms (Tokens: ${totalTokens}, Cost: $${totalCost.toFixed(6)})`);
+    this.logger.log(`Workflow Run [${effectiveRunId}] finished with status "${overallStatus}" in ${totalLatency}ms (Tokens: ${totalTokens}, Cost: $${totalCost.toFixed(6)})`);
 
     return {
-      runId,
+      runId: effectiveRunId,
       status: overallStatus,
       executionTrace,
       finalOutput: context.nodeOutputs,

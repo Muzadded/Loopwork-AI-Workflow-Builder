@@ -45,6 +45,7 @@ export interface LlmNodeConfig {
     model?: string;
     jsonOutput?: boolean;
     systemInstruction?: string;
+    systemPrompt?: string;
     confidenceThreshold?: number;
 }
 export interface ConditionNodeConfig {
