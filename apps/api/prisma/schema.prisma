@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Workflow {
+  id          String        @id @default(uuid())
+  userId      String        @default("default_user")
+  name        String
+  definition  String        // Stored as JSON string
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  runs        WorkflowRun[]
+
+  @@map("workflows")
+}
+
+model WorkflowRun {
+  id           String     @id @default(uuid())
+  workflowId   String
+  workflow     Workflow   @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  status       String     // pending | running | awaiting_approval | completed | failed
+  input        String     // Stored as JSON string
+  startedAt    DateTime   @default(now())
+  finishedAt   DateTime?
+  totalCostUsd Float?
+  steps        RunStep[]
+  approvals    Approval[]
+
+  @@map("workflow_runs")
+}
+
+model RunStep {
+  id          String      @id @default(uuid())
+  runId       String
+  run         WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  nodeId      String
+  nodeType    String
+  input       String      // Stored as JSON string
+  output      String?     // Stored as JSON string
+  status      String      // success | failed | retrying
+  latencyMs   Int?
+  tokensUsed  Int?
+  costUsd     Float?
+  createdAt   DateTime    @default(now())
+
+  @@map("run_steps")
+}
+
+model Approval {
+  id         String      @id @default(uuid())
+  runId      String
+  run        WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  nodeId     String
+  status     String      // pending | approved | rejected
+  payload    String      // Stored as JSON string
+  createdAt  DateTime    @default(now())
+  resolvedAt DateTime?
+
+  @@map("approvals")
+}
