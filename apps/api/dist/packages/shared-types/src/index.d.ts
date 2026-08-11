@@ -13,6 +13,7 @@ export interface WorkflowEdge {
     source: string;
     target: string;
     condition?: string;
+    edgeType?: 'default' | 'confidence_threshold';
 }
 export interface WorkflowDefinition {
     id: string;
@@ -40,6 +41,14 @@ export interface ExecutionContext {
     initialInput: Record<string, any>;
     nodeOutputs: Record<string, Record<string, any>>;
 }
+export interface WorkflowResumeState {
+    nodeOutputs: Record<string, Record<string, any>>;
+    completedNodeIds: string[];
+}
+export interface WorkflowExecutionOptions {
+    onStepComplete?: (step: RunStepResult) => Promise<void>;
+    resumeState?: WorkflowResumeState;
+}
 export interface LlmNodeConfig {
     prompt: string;
     model?: string;
@@ -47,11 +56,14 @@ export interface LlmNodeConfig {
     systemInstruction?: string;
     systemPrompt?: string;
     confidenceThreshold?: number;
+    enableTieredFallback?: boolean;
 }
 export interface ConditionNodeConfig {
     field: string;
     operator: 'equals' | 'not_equals' | 'greater_than' | 'less_than' | 'contains' | 'truthy';
     value?: any;
+    mode?: 'expression' | 'confidence_threshold';
+    threshold?: number;
 }
 export interface ActionNodeConfig {
     actionType: 'http' | 'log';
@@ -141,4 +153,34 @@ export interface HealthCheckResponse {
     timestamp: string;
     postgres: 'connected' | 'disconnected';
     redis: 'connected' | 'disconnected';
+}
+export interface DashboardMetrics {
+    totalRuns: number;
+    successRate: number;
+    totalCostUsd: number;
+    avgLatencyMs: number;
+    pendingApprovals: number;
+    modelUsage: {
+        flash: number;
+        pro: number;
+        other: number;
+    };
+    costOverTime: {
+        date: string;
+        costUsd: number;
+    }[];
+    runsByDay: {
+        date: string;
+        count: number;
+    }[];
+}
+export interface RecentRunItem {
+    id: string;
+    workflowId: string;
+    workflowName: string;
+    status: RunStatus;
+    startedAt: string;
+    finishedAt?: string | null;
+    totalCostUsd?: number | null;
+    totalLatencyMs?: number | null;
 }

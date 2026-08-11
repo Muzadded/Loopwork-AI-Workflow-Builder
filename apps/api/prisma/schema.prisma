@@ -45,8 +45,10 @@ model RunStep {
   latencyMs   Int?
   tokensUsed  Int?
   costUsd     Float?
+  error       String?
   createdAt   DateTime    @default(now())
 
+  @@unique([runId, nodeId])
   @@map("run_steps")
 }
 
