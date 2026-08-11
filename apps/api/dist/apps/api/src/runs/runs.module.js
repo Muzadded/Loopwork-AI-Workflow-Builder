@@ -9,6 +9,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.RunsModule = void 0;
 const common_1 = require("@nestjs/common");
 const runs_controller_1 = require("./runs.controller");
+const dashboard_controller_1 = require("./dashboard.controller");
 const queue_module_1 = require("../queue/queue.module");
 let RunsModule = class RunsModule {
 };
@@ -16,7 +17,7 @@ exports.RunsModule = RunsModule;
 exports.RunsModule = RunsModule = __decorate([
     (0, common_1.Module)({
         imports: [queue_module_1.QueueModule.forApi()],
-        controllers: [runs_controller_1.RunsController],
+        controllers: [runs_controller_1.RunsController, dashboard_controller_1.DashboardController],
     })
 ], RunsModule);
 //# sourceMappingURL=runs.module.js.map
