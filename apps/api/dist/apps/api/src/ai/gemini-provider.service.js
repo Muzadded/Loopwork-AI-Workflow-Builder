@@ -15,6 +15,7 @@ const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const generative_ai_1 = require("@google/generative-ai");
 const model_normalizer_1 = require("../engine/utils/model-normalizer");
+const model_pricing_1 = require("./model-pricing");
 const PLACEHOLDER_KEYS = new Set([
     'your_key_here',
     'your_gemini_api_key_here',
@@ -81,7 +82,7 @@ let GeminiProviderService = GeminiProviderService_1 = class GeminiProviderServic
         const promptTokens = usage?.promptTokenCount || Math.ceil(prompt.length / 4);
         const candidateTokens = usage?.candidatesTokenCount || Math.ceil(responseText.length / 4);
         const totalTokens = promptTokens + candidateTokens;
-        const costUsd = promptTokens * 0.000000075 + candidateTokens * 0.0000003;
+        const costUsd = (0, model_pricing_1.estimateCostUsd)(modelName, promptTokens, candidateTokens);
         let parsedJson;
         if (options.jsonOutput) {
             try {
