@@ -65,14 +65,14 @@ let WorkflowEngineService = WorkflowEngineService_1 = class WorkflowEngineServic
         }
         return sortedNodes;
     }
-    async executeWorkflow(definition, initialInput = {}) {
+    async executeWorkflow(definition, initialInput = {}, runId) {
         const startTime = Date.now();
-        const runId = (0, node_crypto_1.randomUUID)();
-        this.logger.log(`Starting Workflow Run [${runId}] for Workflow "${definition.name}" (${definition.nodes.length} nodes)`);
+        const effectiveRunId = runId ?? (0, node_crypto_1.randomUUID)();
+        this.logger.log(`Starting Workflow Run [${effectiveRunId}] for Workflow "${definition.name}" (${definition.nodes.length} nodes)`);
         const sortedNodes = this.topologicalSort(definition);
         const context = {
             workflowId: definition.id,
-            runId,
+            runId: effectiveRunId,
             initialInput,
             nodeOutputs: {},
         };
@@ -92,7 +92,7 @@ let WorkflowEngineService = WorkflowEngineService_1 = class WorkflowEngineServic
                 executionTrace.push(stepResult);
                 if (stepResult.status === 'failed') {
                     overallStatus = 'failed';
-                    this.logger.error(`Workflow Run [${runId}] failed at node [${node.id}]`);
+                    this.logger.error(`Workflow Run [${effectiveRunId}] failed at node [${node.id}]`);
                     break;
                 }
                 if (stepResult.output) {
@@ -109,8 +109,8 @@ let WorkflowEngineService = WorkflowEngineService_1 = class WorkflowEngineServic
                     Number(stepResult.output.confidence) < Number(node.config.confidenceThreshold);
                 if (isApprovalNode || lowConfidence) {
                     overallStatus = 'awaiting_approval';
-                    this.logger.warn(`Workflow Run [${runId}] paused at node [${node.id}] - ${isApprovalNode ? 'Explicit Approval Node reached' : `Low AI confidence score (${stepResult.output?.confidence})`}`);
-                    await this.approvalsService.createApproval(runId, node.id, {
+                    this.logger.warn(`Workflow Run [${effectiveRunId}] paused at node [${node.id}] - ${isApprovalNode ? 'Explicit Approval Node reached' : `Low AI confidence score (${stepResult.output?.confidence})`}`);
+                    await this.approvalsService.createApproval(effectiveRunId, node.id, {
                         stepResult,
                         nodeOutputs: context.nodeOutputs,
                         reason: isApprovalNode ? 'Manual approval step' : 'Low AI confidence score below threshold',
@@ -143,9 +143,9 @@ let WorkflowEngineService = WorkflowEngineService_1 = class WorkflowEngineServic
             }
         }
         const totalLatency = Date.now() - startTime;
-        this.logger.log(`Workflow Run [${runId}] finished with status "${overallStatus}" in ${totalLatency}ms (Tokens: ${totalTokens}, Cost: $${totalCost.toFixed(6)})`);
+        this.logger.log(`Workflow Run [${effectiveRunId}] finished with status "${overallStatus}" in ${totalLatency}ms (Tokens: ${totalTokens}, Cost: $${totalCost.toFixed(6)})`);
         return {
-            runId,
+            runId: effectiveRunId,
             status: overallStatus,
             executionTrace,
             finalOutput: context.nodeOutputs,

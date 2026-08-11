@@ -7,5 +7,5 @@ export declare class WorkflowEngineService {
     private readonly logger;
     constructor(executorRegistry: NodeExecutorRegistry, approvalsService: ApprovalsService);
     topologicalSort(definition: WorkflowDefinition): WorkflowNode[];
-    executeWorkflow(definition: WorkflowDefinition, initialInput?: Record<string, any>): Promise<EngineTestRunResponse>;
+    executeWorkflow(definition: WorkflowDefinition, initialInput?: Record<string, any>, runId?: string): Promise<EngineTestRunResponse>;
 }
