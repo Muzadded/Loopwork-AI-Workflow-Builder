@@ -74,7 +74,7 @@ let QueueService = QueueService_1 = class QueueService {
         try {
             const workflow = await this.workflowsService.findOne(workflowId);
             await this.runsService.updateRunStatus(runId, 'running');
-            const result = await this.engineService.executeWorkflow(workflow.definition, initialInput);
+            const result = await this.engineService.executeWorkflow(workflow.definition, initialInput, runId);
             for (const step of result.executionTrace) {
                 await this.runsService.recordStepResult(runId, step);
             }
