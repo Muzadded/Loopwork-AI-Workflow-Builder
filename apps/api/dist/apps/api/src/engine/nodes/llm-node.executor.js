@@ -13,6 +13,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.LlmNodeExecutor = void 0;
 const common_1 = require("@nestjs/common");
 const gemini_provider_service_1 = require("../../ai/gemini-provider.service");
+const llm_config_1 = require("../utils/llm-config");
 const template_interpolator_1 = require("../utils/template-interpolator");
 let LlmNodeExecutor = LlmNodeExecutor_1 = class LlmNodeExecutor {
     geminiProvider;
@@ -22,14 +23,23 @@ let LlmNodeExecutor = LlmNodeExecutor_1 = class LlmNodeExecutor {
     }
     async execute(node, context) {
         const startTime = Date.now();
-        const config = node.config;
-        const rawPrompt = config.prompt || '';
-        const interpolatedPrompt = (0, template_interpolator_1.interpolateTemplate)(rawPrompt, context);
-        this.logger.log(`Executing LLM Node [${node.id}] with prompt template interpolation`);
+        const config = (0, llm_config_1.resolveLlmNodeConfig)(node.config);
+        if (!config.prompt.trim()) {
+            return {
+                nodeId: node.id,
+                nodeType: 'llm',
+                input: { model: config.model },
+                status: 'failed',
+                error: 'LLM node requires a prompt (config.prompt or config.systemPrompt)',
+                latencyMs: Date.now() - startTime,
+            };
+        }
+        const interpolatedPrompt = (0, template_interpolator_1.interpolateTemplate)(config.prompt, context);
+        this.logger.log(`Executing LLM Node [${node.id}] with model "${config.model}"`);
         try {
             const response = await this.geminiProvider.complete(interpolatedPrompt, {
-                model: config.model || 'gemini-2.5-flash',
-                jsonOutput: config.jsonOutput !== false,
+                model: config.model,
+                jsonOutput: config.jsonOutput,
                 systemInstruction: config.systemInstruction,
             });
             const outputData = response.json || { text: response.text };
@@ -50,7 +60,7 @@ let LlmNodeExecutor = LlmNodeExecutor_1 = class LlmNodeExecutor {
             return {
                 nodeId: node.id,
                 nodeType: 'llm',
-                input: { prompt: interpolatedPrompt },
+                input: { prompt: interpolatedPrompt, model: config.model },
                 status: 'failed',
                 error: errorMessage,
                 latencyMs: Date.now() - startTime,
