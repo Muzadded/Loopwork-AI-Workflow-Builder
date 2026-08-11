@@ -4,6 +4,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { IAiProvider } from './ai-provider.interface';
 import { AiOptions, AiResponse } from '@repo/shared-types';
 import { normalizeGeminiModel } from '../engine/utils/model-normalizer';
+import { estimateCostUsd } from './model-pricing';
 
 const PLACEHOLDER_KEYS = new Set([
   'your_key_here',
@@ -84,7 +85,7 @@ export class GeminiProviderService implements IAiProvider {
     const candidateTokens = usage?.candidatesTokenCount || Math.ceil(responseText.length / 4);
     const totalTokens = promptTokens + candidateTokens;
 
-    const costUsd = promptTokens * 0.000000075 + candidateTokens * 0.0000003;
+    const costUsd = estimateCostUsd(modelName, promptTokens, candidateTokens);
 
     let parsedJson: Record<string, any> | undefined;
     if (options.jsonOutput) {
