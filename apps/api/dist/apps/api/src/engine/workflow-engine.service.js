@@ -65,16 +65,17 @@ let WorkflowEngineService = WorkflowEngineService_1 = class WorkflowEngineServic
         }
         return sortedNodes;
     }
-    async executeWorkflow(definition, initialInput = {}, runId) {
+    async executeWorkflow(definition, initialInput = {}, runId, options = {}) {
         const startTime = Date.now();
         const effectiveRunId = runId ?? (0, node_crypto_1.randomUUID)();
-        this.logger.log(`Starting Workflow Run [${effectiveRunId}] for Workflow "${definition.name}" (${definition.nodes.length} nodes)`);
+        const completedNodeIds = new Set(options.resumeState?.completedNodeIds ?? []);
+        this.logger.log(`Starting Workflow Run [${effectiveRunId}] for Workflow "${definition.name}" (${definition.nodes.length} nodes)${completedNodeIds.size > 0 ? ` — resuming after ${completedNodeIds.size} completed step(s)` : ''}`);
         const sortedNodes = this.topologicalSort(definition);
         const context = {
             workflowId: definition.id,
             runId: effectiveRunId,
             initialInput,
-            nodeOutputs: {},
+            nodeOutputs: { ...(options.resumeState?.nodeOutputs ?? {}) },
         };
         const executionTrace = [];
         const disabledNodes = new Set();
@@ -82,6 +83,10 @@ let WorkflowEngineService = WorkflowEngineService_1 = class WorkflowEngineServic
         let totalCost = 0;
         let overallStatus = 'completed';
         for (const node of sortedNodes) {
+            if (completedNodeIds.has(node.id)) {
+                this.logger.log(`Skipping Node [${node.id}] (${node.type}) — already completed in a prior attempt`);
+                continue;
+            }
             if (disabledNodes.has(node.id)) {
                 this.logger.log(`Skipping Node [${node.id}] (${node.type}) - Disabled by upstream branch condition`);
                 continue;
@@ -90,6 +95,7 @@ let WorkflowEngineService = WorkflowEngineService_1 = class WorkflowEngineServic
                 const executor = this.executorRegistry.getExecutor(node.type);
                 const stepResult = await executor.execute(node, context);
                 executionTrace.push(stepResult);
+                await options.onStepComplete?.(stepResult);
                 if (stepResult.status === 'failed') {
                     overallStatus = 'failed';
                     this.logger.error(`Workflow Run [${effectiveRunId}] failed at node [${node.id}]`);
@@ -131,13 +137,15 @@ let WorkflowEngineService = WorkflowEngineService_1 = class WorkflowEngineServic
             catch (err) {
                 const errorMsg = err instanceof Error ? err.message : String(err);
                 this.logger.error(`Exception during execution of node [${node.id}]: ${errorMsg}`);
-                executionTrace.push({
+                const failedStep = {
                     nodeId: node.id,
                     nodeType: node.type,
                     input: {},
                     status: 'failed',
                     error: errorMsg,
-                });
+                };
+                executionTrace.push(failedStep);
+                await options.onStepComplete?.(failedStep);
                 overallStatus = 'failed';
                 break;
             }

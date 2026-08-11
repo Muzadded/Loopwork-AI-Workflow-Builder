@@ -23,7 +23,7 @@ let EngineModule = class EngineModule {
 exports.EngineModule = EngineModule;
 exports.EngineModule = EngineModule = __decorate([
     (0, common_1.Module)({
-        imports: [ai_module_1.AiModule, approvals_module_1.ApprovalsModule],
+        imports: [ai_module_1.AiModule, (0, common_1.forwardRef)(() => approvals_module_1.ApprovalsModule)],
         providers: [
             trigger_node_executor_1.TriggerNodeExecutor,
             llm_node_executor_1.LlmNodeExecutor,
