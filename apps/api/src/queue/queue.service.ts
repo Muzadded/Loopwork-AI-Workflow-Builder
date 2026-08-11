@@ -26,7 +26,6 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     try {
       const client = this.redisService.getClient();
-      // Only initialize BullMQ Queue if using a real ioredis client
       if (this.redisService.isUsingRealClient()) {
         this.queue = new Queue<WorkflowRunJobData>('workflow-execution', {
           connection: client as any,
@@ -64,47 +63,53 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    // Dev Fallback Mode: Process asynchronously without blocking HTTP handler
     setImmediate(async () => {
       await this.processJobDirectly({ runId, workflowId, initialInput });
     });
   }
 
   /**
-   * Internal job processor used directly in dev fallback mode or by BullMQ worker
+   * Internal job processor used directly in dev fallback mode or by BullMQ worker.
+   * Persists each step as it completes and supports idempotent retries.
    */
   async processJobDirectly(data: WorkflowRunJobData) {
     const { runId, workflowId, initialInput } = data;
     this.logger.log(`Processing Workflow Execution Job for Run [${runId}]`);
 
     try {
-      // 1. Fetch Workflow definition
       const workflow = await this.workflowsService.findOne(workflowId);
+      const existingRun = await this.runsService.getRun(runId);
+      const resumeState = this.runsService.buildResumeState(existingRun.steps);
 
-      // 2. Update Run Status => 'running'
       await this.runsService.updateRunStatus(runId, 'running');
 
-      // 3. Execute Workflow DAG
-      const result = await this.engineService.executeWorkflow(workflow.definition, initialInput, runId);
-
-      // 4. Persist individual step results in database
-      for (const step of result.executionTrace) {
-        await this.runsService.recordStepResult(runId, step);
-      }
-
-      // 5. Update Run Status => 'completed' / 'failed'
-      await this.runsService.updateRunStatus(
+      const result = await this.engineService.executeWorkflow(
+        workflow.definition,
+        initialInput,
         runId,
-        result.status,
-        new Date(),
-        result.totalCostUsd,
+        {
+          resumeState,
+          onStepComplete: async (step) => {
+            await this.runsService.upsertStepResult(runId, step);
+          },
+        },
       );
+
+      const isTerminal = result.status === 'completed' || result.status === 'failed';
+      const finalRun = await this.runsService.getRun(runId);
+      const totalCostUsd = finalRun.steps.reduce((sum, s) => sum + (s.costUsd ?? 0), 0);
+
+      await this.runsService.updateRunStatus(runId, result.status, {
+        finishedAt: isTerminal ? new Date() : undefined,
+        totalCostUsd,
+      });
 
       this.logger.log(`Finished processing Job for Run [${runId}] with status "${result.status}"`);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Job processing failed for Run [${runId}]: ${errorMsg}`);
-      await this.runsService.updateRunStatus(runId, 'failed', new Date());
+      await this.runsService.updateRunStatus(runId, 'failed', { finishedAt: new Date() });
+      throw err;
     }
   }
 }

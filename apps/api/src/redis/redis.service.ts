@@ -6,34 +6,50 @@ import RedisMock from 'ioredis-mock';
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
-  private redisClient: Redis;
+  private redisClient!: Redis;
   private isMock = false;
 
   constructor(private readonly configService: ConfigService) {}
 
   async onModuleInit() {
     const redisUrl = this.configService.get<string>('REDIS_URL', 'redis://localhost:6379');
-    
+    const isProduction = process.env.NODE_ENV === 'production';
+    const allowMock =
+      !isProduction &&
+      (this.configService.get<string>('REDIS_MOCK') === 'true' ||
+        process.env.RUN_MODE !== 'worker');
+
     try {
       this.redisClient = new Redis(redisUrl, {
-        maxRetriesPerRequest: 1,
+        maxRetriesPerRequest: null,
         retryStrategy(times) {
-          if (times > 2) return null; // Stop retrying quickly to trigger fallback
-          return Math.min(times * 100, 1000);
+          if (times > 5) return null;
+          return Math.min(times * 200, 2000);
         },
       });
 
       this.redisClient.on('error', (err) => {
         if (!this.isMock) {
-          this.logger.warn(`Redis connection error: ${err.message}. Switching to mock client for dev health.`);
-          this.switchToMock();
+          this.logger.error(`Redis connection error: ${err.message}`);
         }
       });
 
       await this.redisClient.ping();
       this.logger.log('Successfully connected to Redis instance');
     } catch (err) {
-      this.logger.warn(`Failed to connect to Redis at ${redisUrl}. Using mock instance.`);
+      const message = err instanceof Error ? err.message : String(err);
+
+      if (isProduction) {
+        throw new Error(`Redis is required in production but connection failed: ${message}`);
+      }
+
+      if (!allowMock) {
+        throw new Error(
+          `Redis connection failed: ${message}. Start Redis or set REDIS_MOCK=true for local dev.`,
+        );
+      }
+
+      this.logger.warn(`Failed to connect to Redis at ${redisUrl}. Using in-memory mock (dev only).`);
       this.switchToMock();
     }
   }
@@ -53,6 +69,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async isHealthy(): Promise<boolean> {
+    if (this.isMock) return false;
+
     try {
       const res = await this.redisClient.ping();
       return res === 'PONG';

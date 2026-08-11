@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { AiModule } from '../ai/ai.module';
 import { ApprovalsModule } from '../approvals/approvals.module';
 import { TriggerNodeExecutor } from './nodes/trigger-node.executor';
@@ -11,7 +11,7 @@ import { WorkflowEngineService } from './workflow-engine.service';
 import { EngineController } from './engine.controller';
 
 @Module({
-  imports: [AiModule, ApprovalsModule],
+  imports: [AiModule, forwardRef(() => ApprovalsModule)],
   providers: [
     TriggerNodeExecutor,
     LlmNodeExecutor,

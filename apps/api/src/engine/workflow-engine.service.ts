@@ -2,11 +2,11 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import {
   WorkflowDefinition,
   WorkflowNode,
-  WorkflowEdge,
   ExecutionContext,
   RunStepResult,
   EngineTestRunResponse,
   RunStatus,
+  WorkflowExecutionOptions,
 } from '@repo/shared-types';
 import { NodeExecutorRegistry } from './nodes/node-executor.registry';
 import { randomUUID } from 'node:crypto';
@@ -68,7 +68,9 @@ export class WorkflowEngineService {
     }
 
     if (sortedNodes.length !== nodes.length) {
-      throw new BadRequestException('Workflow graph contains a cycle or unreachable nodes. Must be a valid Directed Acyclic Graph (DAG).');
+      throw new BadRequestException(
+        'Workflow graph contains a cycle or unreachable nodes. Must be a valid Directed Acyclic Graph (DAG).',
+      );
     }
 
     return sortedNodes;
@@ -77,23 +79,30 @@ export class WorkflowEngineService {
   /**
    * Executes a workflow DAG step by step.
    * @param runId Optional DB-assigned run ID. When omitted, a new UUID is generated (test-run only).
+   * @param options Persistence callback and resume state for async/retry execution.
    */
   async executeWorkflow(
     definition: WorkflowDefinition,
     initialInput: Record<string, any> = {},
     runId?: string,
+    options: WorkflowExecutionOptions = {},
   ): Promise<EngineTestRunResponse> {
     const startTime = Date.now();
     const effectiveRunId = runId ?? randomUUID();
+    const completedNodeIds = new Set(options.resumeState?.completedNodeIds ?? []);
 
-    this.logger.log(`Starting Workflow Run [${effectiveRunId}] for Workflow "${definition.name}" (${definition.nodes.length} nodes)`);
+    this.logger.log(
+      `Starting Workflow Run [${effectiveRunId}] for Workflow "${definition.name}" (${definition.nodes.length} nodes)${
+        completedNodeIds.size > 0 ? ` — resuming after ${completedNodeIds.size} completed step(s)` : ''
+      }`,
+    );
 
     const sortedNodes = this.topologicalSort(definition);
     const context: ExecutionContext = {
       workflowId: definition.id,
       runId: effectiveRunId,
       initialInput,
-      nodeOutputs: {},
+      nodeOutputs: { ...(options.resumeState?.nodeOutputs ?? {}) },
     };
 
     const executionTrace: RunStepResult[] = [];
@@ -103,8 +112,12 @@ export class WorkflowEngineService {
     let totalCost = 0;
     let overallStatus: RunStatus = 'completed';
 
-    // Step-by-step execution
     for (const node of sortedNodes) {
+      if (completedNodeIds.has(node.id)) {
+        this.logger.log(`Skipping Node [${node.id}] (${node.type}) — already completed in a prior attempt`);
+        continue;
+      }
+
       if (disabledNodes.has(node.id)) {
         this.logger.log(`Skipping Node [${node.id}] (${node.type}) - Disabled by upstream branch condition`);
         continue;
@@ -115,6 +128,7 @@ export class WorkflowEngineService {
         const stepResult = await executor.execute(node, context);
 
         executionTrace.push(stepResult);
+        await options.onStepComplete?.(stepResult);
 
         if (stepResult.status === 'failed') {
           overallStatus = 'failed';
@@ -129,7 +143,6 @@ export class WorkflowEngineService {
         if (stepResult.tokensUsed) totalTokens += stepResult.tokensUsed;
         if (stepResult.costUsd) totalCost += stepResult.costUsd;
 
-        // Check for Human-in-the-loop Approval Pausing
         const isApprovalNode = node.type === 'approval';
         const lowConfidence =
           node.type === 'llm' &&
@@ -151,10 +164,9 @@ export class WorkflowEngineService {
             reason: isApprovalNode ? 'Manual approval step' : 'Low AI confidence score below threshold',
           });
 
-          break; // Pause execution loop
+          break;
         }
 
-        // Handle Condition Node Branching
         if (node.type === 'condition' && stepResult.output) {
           const selectedBranch = stepResult.output.branch;
           const outgoingEdges = definition.edges.filter((e) => e.source === node.id);
@@ -162,7 +174,9 @@ export class WorkflowEngineService {
           for (const edge of outgoingEdges) {
             if (edge.condition && edge.condition !== selectedBranch) {
               disabledNodes.add(edge.target);
-              this.logger.log(`Branching: Disabling target node [${edge.target}] on non-matching edge condition "${edge.condition}"`);
+              this.logger.log(
+                `Branching: Disabling target node [${edge.target}] on non-matching edge condition "${edge.condition}"`,
+              );
             }
           }
         }
@@ -170,13 +184,16 @@ export class WorkflowEngineService {
         const errorMsg = err instanceof Error ? err.message : String(err);
         this.logger.error(`Exception during execution of node [${node.id}]: ${errorMsg}`);
 
-        executionTrace.push({
+        const failedStep: RunStepResult = {
           nodeId: node.id,
           nodeType: node.type,
           input: {},
           status: 'failed',
           error: errorMsg,
-        });
+        };
+
+        executionTrace.push(failedStep);
+        await options.onStepComplete?.(failedStep);
 
         overallStatus = 'failed';
         break;
@@ -184,7 +201,9 @@ export class WorkflowEngineService {
     }
 
     const totalLatency = Date.now() - startTime;
-    this.logger.log(`Workflow Run [${effectiveRunId}] finished with status "${overallStatus}" in ${totalLatency}ms (Tokens: ${totalTokens}, Cost: $${totalCost.toFixed(6)})`);
+    this.logger.log(
+      `Workflow Run [${effectiveRunId}] finished with status "${overallStatus}" in ${totalLatency}ms (Tokens: ${totalTokens}, Cost: $${totalCost.toFixed(6)})`,
+    );
 
     return {
       runId: effectiveRunId,

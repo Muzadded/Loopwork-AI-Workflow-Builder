@@ -24,7 +24,7 @@ export class ApprovalNodeExecutor implements INodeExecutor {
         requiresApproval: true,
         message: interpolatedMessage,
         assigneeRole: config.assigneeRole || 'admin',
-        contextSnapshot: context.nodeOutputs,
+        contextSnapshot: { ...context.nodeOutputs },
       },
       status: 'success',
       latencyMs: Date.now() - startTime,

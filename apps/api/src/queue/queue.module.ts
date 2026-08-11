@@ -1,4 +1,4 @@
-import { DynamicModule, Module } from '@nestjs/common';
+import { DynamicModule, Module, forwardRef } from '@nestjs/common';
 import { RedisModule } from '../redis/redis.module';
 import { EngineModule } from '../engine/engine.module';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -15,7 +15,7 @@ export class QueueModule {
   static forApi(): DynamicModule {
     return {
       module: QueueModule,
-      imports: [RedisModule, EngineModule, PrismaModule],
+      imports: [RedisModule, forwardRef(() => EngineModule), PrismaModule],
       providers: sharedProviders,
       exports: [QueueService, WorkflowsService, WorkflowRunsService],
     };
@@ -25,7 +25,7 @@ export class QueueModule {
   static forWorker(): DynamicModule {
     return {
       module: QueueModule,
-      imports: [RedisModule, EngineModule, PrismaModule],
+      imports: [RedisModule, forwardRef(() => EngineModule), PrismaModule],
       providers: [...sharedProviders, WorkflowExecutionWorker],
       exports: [QueueService, WorkflowsService, WorkflowRunsService],
     };
