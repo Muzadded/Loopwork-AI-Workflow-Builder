@@ -1,0 +1,21 @@
+{
+  "name": "ai-workflow-platform",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace=apps/web",
+    "dev:api": "npm run start:dev --workspace=apps/api",
+    "dev:worker": "npm run start:worker:dev --workspace=apps/api",
+    "build:types": "npm run build --workspace=packages/shared-types",
+    "build": "npm run build --workspaces --if-present",
+    "db:migrate": "npm run db:migrate --workspace=apps/api",
+    "db:studio": "npm run db:studio --workspace=apps/api"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}
