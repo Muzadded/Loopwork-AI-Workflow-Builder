@@ -73,18 +73,29 @@ let QueueService = QueueService_1 = class QueueService {
         this.logger.log(`Processing Workflow Execution Job for Run [${runId}]`);
         try {
             const workflow = await this.workflowsService.findOne(workflowId);
+            const existingRun = await this.runsService.getRun(runId);
+            const resumeState = this.runsService.buildResumeState(existingRun.steps);
             await this.runsService.updateRunStatus(runId, 'running');
-            const result = await this.engineService.executeWorkflow(workflow.definition, initialInput, runId);
-            for (const step of result.executionTrace) {
-                await this.runsService.recordStepResult(runId, step);
-            }
-            await this.runsService.updateRunStatus(runId, result.status, new Date(), result.totalCostUsd);
+            const result = await this.engineService.executeWorkflow(workflow.definition, initialInput, runId, {
+                resumeState,
+                onStepComplete: async (step) => {
+                    await this.runsService.upsertStepResult(runId, step);
+                },
+            });
+            const isTerminal = result.status === 'completed' || result.status === 'failed';
+            const finalRun = await this.runsService.getRun(runId);
+            const totalCostUsd = finalRun.steps.reduce((sum, s) => sum + (s.costUsd ?? 0), 0);
+            await this.runsService.updateRunStatus(runId, result.status, {
+                finishedAt: isTerminal ? new Date() : undefined,
+                totalCostUsd,
+            });
             this.logger.log(`Finished processing Job for Run [${runId}] with status "${result.status}"`);
         }
         catch (err) {
             const errorMsg = err instanceof Error ? err.message : String(err);
             this.logger.error(`Job processing failed for Run [${runId}]: ${errorMsg}`);
-            await this.runsService.updateRunStatus(runId, 'failed', new Date());
+            await this.runsService.updateRunStatus(runId, 'failed', { finishedAt: new Date() });
+            throw err;
         }
     }
 };

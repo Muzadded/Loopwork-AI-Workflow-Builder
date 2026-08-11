@@ -21,7 +21,7 @@ let QueueModule = QueueModule_1 = class QueueModule {
     static forApi() {
         return {
             module: QueueModule_1,
-            imports: [redis_module_1.RedisModule, engine_module_1.EngineModule, prisma_module_1.PrismaModule],
+            imports: [redis_module_1.RedisModule, (0, common_1.forwardRef)(() => engine_module_1.EngineModule), prisma_module_1.PrismaModule],
             providers: sharedProviders,
             exports: [queue_service_1.QueueService, workflows_service_1.WorkflowsService, workflow_runs_service_1.WorkflowRunsService],
         };
@@ -29,7 +29,7 @@ let QueueModule = QueueModule_1 = class QueueModule {
     static forWorker() {
         return {
             module: QueueModule_1,
-            imports: [redis_module_1.RedisModule, engine_module_1.EngineModule, prisma_module_1.PrismaModule],
+            imports: [redis_module_1.RedisModule, (0, common_1.forwardRef)(() => engine_module_1.EngineModule), prisma_module_1.PrismaModule],
             providers: [...sharedProviders, workflow_execution_worker_1.WorkflowExecutionWorker],
             exports: [queue_service_1.QueueService, workflows_service_1.WorkflowsService, workflow_runs_service_1.WorkflowRunsService],
         };
