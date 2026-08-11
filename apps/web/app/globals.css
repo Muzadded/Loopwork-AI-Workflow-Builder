@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .font-serif {
+    font-family: var(--font-playfair), Georgia, Cambria, "Times New Roman", Times, serif;
+  }
+}
+
+.bg-dots {
+  background-image: radial-gradient(#E5DFD5 1.5px, transparent 1.5px);
+  background-size: 16px 16px;
+}
+
+body {
+  background-color: #FAF7F2;
+  color: #2C2622;
+}
