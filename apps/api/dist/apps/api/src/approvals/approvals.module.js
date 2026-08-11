@@ -11,12 +11,13 @@ const common_1 = require("@nestjs/common");
 const prisma_module_1 = require("../prisma/prisma.module");
 const approvals_service_1 = require("./approvals.service");
 const approvals_controller_1 = require("./approvals.controller");
+const queue_module_1 = require("../queue/queue.module");
 let ApprovalsModule = class ApprovalsModule {
 };
 exports.ApprovalsModule = ApprovalsModule;
 exports.ApprovalsModule = ApprovalsModule = __decorate([
     (0, common_1.Module)({
-        imports: [prisma_module_1.PrismaModule],
+        imports: [prisma_module_1.PrismaModule, (0, common_1.forwardRef)(() => queue_module_1.QueueModule.forApi())],
         providers: [approvals_service_1.ApprovalsService],
         controllers: [approvals_controller_1.ApprovalsController],
         exports: [approvals_service_1.ApprovalsService],
