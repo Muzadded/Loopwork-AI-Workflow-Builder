@@ -16,42 +16,47 @@ let ConditionNodeExecutor = ConditionNodeExecutor_1 = class ConditionNodeExecuto
         const startTime = Date.now();
         const config = node.config;
         const actualValue = (0, template_interpolator_1.getValueFromPath)(config.field || '', context);
-        const targetValue = config.value;
-        const operator = config.operator || 'equals';
         let conditionMet = false;
-        switch (operator) {
-            case 'equals':
-                conditionMet = String(actualValue) === String(targetValue);
-                break;
-            case 'not_equals':
-                conditionMet = String(actualValue) !== String(targetValue);
-                break;
-            case 'greater_than':
-                conditionMet = Number(actualValue) > Number(targetValue);
-                break;
-            case 'less_than':
-                conditionMet = Number(actualValue) < Number(targetValue);
-                break;
-            case 'contains':
-                conditionMet = String(actualValue).toLowerCase().includes(String(targetValue).toLowerCase());
-                break;
-            case 'truthy':
-                conditionMet = Boolean(actualValue);
-                break;
-            default:
-                conditionMet = Boolean(actualValue);
+        let operator = config.operator || 'equals';
+        const targetValue = config.value;
+        if (config.mode === 'confidence_threshold') {
+            const confidence = Number(actualValue);
+            const threshold = Number(config.threshold ?? config.value ?? 0.85);
+            conditionMet = confidence >= threshold;
+            operator = 'greater_than';
+            this.logger.log(`Condition Node [${node.id}] confidence_threshold: ${confidence} >= ${threshold} => ${conditionMet}`);
+        }
+        else {
+            switch (operator) {
+                case 'equals':
+                    conditionMet = String(actualValue) === String(targetValue);
+                    break;
+                case 'not_equals':
+                    conditionMet = String(actualValue) !== String(targetValue);
+                    break;
+                case 'greater_than':
+                    conditionMet = Number(actualValue) > Number(targetValue);
+                    break;
+                case 'less_than':
+                    conditionMet = Number(actualValue) < Number(targetValue);
+                    break;
+                case 'contains':
+                    conditionMet = String(actualValue).toLowerCase().includes(String(targetValue).toLowerCase());
+                    break;
+                case 'truthy':
+                    conditionMet = Boolean(actualValue);
+                    break;
+                default:
+                    conditionMet = Boolean(actualValue);
+            }
+            this.logger.log(`Condition Node [${node.id}] evaluated (${config.field} ${operator} ${targetValue}) => ${conditionMet}`);
         }
         const branch = conditionMet ? 'true' : 'false';
-        this.logger.log(`Condition Node [${node.id}] evaluated (${config.field} ${operator} ${targetValue}) => ${conditionMet} (Branch: ${branch})`);
         return {
             nodeId: node.id,
             nodeType: 'condition',
-            input: { field: config.field, operator, targetValue, actualValue },
-            output: {
-                conditionMet,
-                branch,
-                actualValue,
-            },
+            input: { field: config.field, operator, targetValue, actualValue, mode: config.mode },
+            output: { conditionMet, branch, actualValue },
             status: 'success',
             latencyMs: Date.now() - startTime,
         };
