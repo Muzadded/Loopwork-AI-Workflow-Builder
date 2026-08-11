@@ -22,13 +22,13 @@ let HealthController = class HealthController {
     }
     async check() {
         const postgresHealthy = await this.prismaService.isHealthy();
-        const redisHealthy = await this.redisService.isHealthy();
-        const isAllOk = postgresHealthy && redisHealthy;
+        const redisConnected = this.redisService.isUsingRealClient() && (await this.redisService.isHealthy());
+        const isAllOk = postgresHealthy && redisConnected;
         return {
             status: isAllOk ? 'ok' : 'error',
             timestamp: new Date().toISOString(),
             postgres: postgresHealthy ? 'connected' : 'disconnected',
-            redis: redisHealthy ? 'connected' : 'disconnected',
+            redis: redisConnected ? 'connected' : 'disconnected',
         };
     }
 };
