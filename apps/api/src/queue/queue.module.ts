@@ -2,12 +2,12 @@ import { DynamicModule, Module, forwardRef } from '@nestjs/common';
 import { RedisModule } from '../redis/redis.module';
 import { EngineModule } from '../engine/engine.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { RunsCoreModule } from '../runs/runs-core.module';
 import { QueueService } from './queue.service';
 import { WorkflowExecutionWorker } from './workflow-execution.worker';
 import { WorkflowsService } from '../workflows/workflows.service';
-import { WorkflowRunsService } from '../runs/workflow-runs.service';
 
-const sharedProviders = [QueueService, WorkflowsService, WorkflowRunsService];
+const apiProviders = [QueueService, WorkflowsService];
 
 @Module({})
 export class QueueModule {
@@ -15,9 +15,9 @@ export class QueueModule {
   static forApi(): DynamicModule {
     return {
       module: QueueModule,
-      imports: [RedisModule, forwardRef(() => EngineModule), PrismaModule],
-      providers: sharedProviders,
-      exports: [QueueService, WorkflowsService, WorkflowRunsService],
+      imports: [RedisModule, forwardRef(() => EngineModule), PrismaModule, RunsCoreModule],
+      providers: apiProviders,
+      exports: [QueueService, WorkflowsService, RunsCoreModule],
     };
   }
 
@@ -25,9 +25,9 @@ export class QueueModule {
   static forWorker(): DynamicModule {
     return {
       module: QueueModule,
-      imports: [RedisModule, forwardRef(() => EngineModule), PrismaModule],
-      providers: [...sharedProviders, WorkflowExecutionWorker],
-      exports: [QueueService, WorkflowsService, WorkflowRunsService],
+      imports: [RedisModule, forwardRef(() => EngineModule), PrismaModule, RunsCoreModule],
+      providers: [...apiProviders, WorkflowExecutionWorker],
+      exports: [QueueService, WorkflowsService, RunsCoreModule],
     };
   }
 }

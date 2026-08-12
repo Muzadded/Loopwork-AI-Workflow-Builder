@@ -1,11 +1,12 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ApprovalsService } from './approvals.service';
 import { ApprovalsController } from './approvals.controller';
 import { QueueModule } from '../queue/queue.module';
+import { RunsCoreModule } from '../runs/runs-core.module';
 
 @Module({
-  imports: [PrismaModule, forwardRef(() => QueueModule.forApi())],
+  imports: [PrismaModule, RunsCoreModule, QueueModule.forApi()],
   providers: [ApprovalsService],
   controllers: [ApprovalsController],
   exports: [ApprovalsService],

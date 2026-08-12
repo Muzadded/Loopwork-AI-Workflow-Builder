@@ -1,7 +1,10 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next';
+import path from 'path';
+import { loadEnvConfig } from '@next/env';
 
-const nextConfig: NextConfig = {
-  /* config options here */
-};
+// Load monorepo root .env so NEXT_PUBLIC_* vars are available to the web app.
+loadEnvConfig(path.join(__dirname, '../..'));
+
+const nextConfig: NextConfig = {};
 
 export default nextConfig;

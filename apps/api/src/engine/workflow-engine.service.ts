@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import {
   WorkflowDefinition,
   WorkflowNode,
@@ -19,6 +19,7 @@ export class WorkflowEngineService {
 
   constructor(
     private readonly executorRegistry: NodeExecutorRegistry,
+    @Inject(forwardRef(() => ApprovalsService))
     private readonly approvalsService: ApprovalsService,
   ) {}
 

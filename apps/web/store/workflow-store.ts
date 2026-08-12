@@ -25,12 +25,14 @@ interface WorkflowStore {
   handleNew: () => void;
 }
 
+const initialWorkflow = createDefaultWorkflow();
+
 export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
-  definition: createDefaultWorkflow(),
+  definition: initialWorkflow,
   savedWorkflowId: null,
   workflows: [],
   activeRun: null,
-  selectedNodeId: createDefaultWorkflow().nodes[0]?.id ?? null,
+  selectedNodeId: initialWorkflow.nodes[0]?.id ?? null,
   isSaving: false,
   isRunning: false,
   statusMessage: null,
@@ -104,7 +106,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   },
 
   handleNew: () => {
-    const def = createDefaultWorkflow();
+    const def = { ...createDefaultWorkflow(), id: `wf-${Date.now()}` };
     set({
       savedWorkflowId: null,
       definition: def,

@@ -2,7 +2,7 @@ import { WorkflowDefinition } from '@repo/shared-types';
 
 export function createDefaultWorkflow(): WorkflowDefinition {
   return {
-    id: `wf-${Date.now()}`,
+    id: 'wf-default-draft',
     name: 'Support Ticket Triage v1',
     nodes: [
       {
