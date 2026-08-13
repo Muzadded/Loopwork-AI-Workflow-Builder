@@ -58,9 +58,9 @@ export default function Home() {
 
           <nav className="flex flex-col gap-3 w-full px-2">
             {[
+              { id: 'dashboard', label: 'DASHBOARD', icon: '🎛️' },
               { id: 'workflows', label: 'WORKFLOWS', icon: '🔀' },
               { id: 'history', label: 'HISTORY', icon: '⏱️' },
-              { id: 'dashboard', label: 'DASHBOARD', icon: '🎛️' },
               { id: 'settings', label: 'SETTINGS', icon: '⚙️' },
             ].map((item) => (
               <button
