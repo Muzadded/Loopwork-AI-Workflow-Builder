@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -83,16 +83,17 @@ function VisualCanvasInner({
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<WorkflowFlowNodeData>>(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const edgeReconnectSuccessful = useRef(true);
 
   useEffect(() => {
-    const { nodes: nextNodes, edges: nextEdges } = definitionToFlow(
-      definition,
-      activeRun,
-      selectedNodeId,
-    );
+    const { nodes: nextNodes } = definitionToFlow(definition, activeRun, selectedNodeId);
     setNodes(nextNodes);
+  }, [definition.nodes, activeRun, selectedNodeId, setNodes]);
+
+  useEffect(() => {
+    const { edges: nextEdges } = definitionToFlow(definition, activeRun, selectedNodeId);
     setEdges(nextEdges);
-  }, [definition, activeRun, selectedNodeId, setNodes, setEdges]);
+  }, [definition.edges, setEdges]);
 
   const handleNodesChange: OnNodesChange<Node<WorkflowFlowNodeData>> = useCallback(
     (changes) => {
@@ -131,15 +132,57 @@ function VisualCanvasInner({
   const handleEdgesChange: OnEdgesChange = useCallback(
     (changes) => {
       onEdgesChange(changes);
-      const removed = changes.filter((c) => c.type === 'remove').map((c) => c.id);
-      if (removed.length > 0) {
+    },
+    [onEdgesChange],
+  );
+
+  const onEdgesDelete = useCallback(
+    (deleted: Edge[]) => {
+      const ids = new Set(deleted.map((e) => e.id));
+      onDefinitionChange({
+        ...definition,
+        edges: definition.edges.filter((e) => !ids.has(e.id)),
+      });
+    },
+    [definition, onDefinitionChange],
+  );
+
+  const onReconnectStart = useCallback(() => {
+    edgeReconnectSuccessful.current = false;
+  }, []);
+
+  const onReconnect = useCallback(
+    (oldEdge: Edge, newConnection: Connection) => {
+      if (!newConnection.source || !newConnection.target) return;
+      edgeReconnectSuccessful.current = true;
+      const sourceNode = definition.nodes.find((n) => n.id === newConnection.source);
+      const updated = createEdgeFromConnection(
+        newConnection.source,
+        newConnection.target,
+        newConnection.sourceHandle,
+        sourceNode?.type,
+      );
+      onDefinitionChange({
+        ...definition,
+        edges: definition.edges.map((e) =>
+          e.id === oldEdge.id ? { ...updated, id: oldEdge.id } : e,
+        ),
+      });
+    },
+    [definition, onDefinitionChange],
+  );
+
+  const onReconnectEnd = useCallback(
+    (_event: MouseEvent | TouchEvent, edge: Edge) => {
+      if (!edgeReconnectSuccessful.current) {
         onDefinitionChange({
           ...definition,
-          edges: definition.edges.filter((e) => !removed.includes(e.id)),
+          edges: definition.edges.filter((e) => e.id !== edge.id),
         });
       }
+      edgeReconnectSuccessful.current = true;
     },
-    [onEdgesChange, definition, onDefinitionChange],
+    [definition, onDefinitionChange],
   );
 
   const onConnect = useCallback(
@@ -293,7 +336,8 @@ function VisualCanvasInner({
             </div>
           ))}
           <p className="text-[10px] text-[#786E65] pt-2 border-t border-[#EAE4D9]">
-            Drag from handles to wire nodes. Condition nodes have true/false outputs.
+            Drag from handles to connect nodes. Drag a line off a node or click a line and press
+            Delete to disconnect. Condition nodes have Yes/No outputs.
           </p>
         </div>
 
@@ -304,11 +348,17 @@ function VisualCanvasInner({
             onNodesChange={handleNodesChange}
             onEdgesChange={handleEdgesChange}
             onConnect={onConnect}
+            onReconnectStart={onReconnectStart}
+            onReconnect={onReconnect}
+            onReconnectEnd={onReconnectEnd}
             onNodeDragStop={onNodeDragStop}
             onNodesDelete={onNodesDelete}
+            onEdgesDelete={onEdgesDelete}
             onNodeClick={(_, node) => onSelectedNodeIdChange(node.id)}
+            onEdgeClick={() => onSelectedNodeIdChange(null)}
             onPaneClick={() => onSelectedNodeIdChange(null)}
             nodeTypes={flowNodeTypes as NodeTypes}
+            defaultEdgeOptions={{ selectable: true, deletable: true, reconnectable: true }}
             fitView
             deleteKeyCode={['Backspace', 'Delete']}
             className="bg-[#FAF7F2]"

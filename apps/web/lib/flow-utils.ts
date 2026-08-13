@@ -82,6 +82,9 @@ export function definitionToFlow(
     label: e.condition ? (e.condition === 'true' ? 'Yes' : e.condition === 'false' ? 'No' : e.condition) : undefined,
     style: { stroke: '#A89F91', strokeWidth: 2 },
     labelStyle: { fill: '#786E65', fontSize: 10, fontWeight: 600 },
+    selectable: true,
+    deletable: true,
+    reconnectable: true,
   }));
 
   return { nodes, edges };
