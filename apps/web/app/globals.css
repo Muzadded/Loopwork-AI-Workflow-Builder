@@ -1,17 +1,141 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
+/* ─── Dark Mode (default) ─── */
+:root {
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+
+  --bg-page: #181C21;
+  --bg-sidebar: #14171B;
+  --sidebar-border: #262B31;
+  --bg-card: #242A31;
+  --bg-card-inset: #2E353D;
+  --border-default: #343B43;
+  --border-strong: #454D56;
+
+  --text-primary: #EDEEF0;
+  --text-secondary: #A6ACB2;
+  --text-muted: #8B9299;
+
+  --accent-primary: #2E8FA3;
+  --accent-hover: #37A3B9;
+  --accent-on-primary: #E2F3F6;
+  --accent-subtle-bg: #111F22;
+
+  --status-success-bg: #182A1F;
+  --status-success-text: #5DCAA5;
+  --status-failed-bg: #301E20;
+  --status-failed-text: #E0908F;
+  --status-pending-bg: #2A2410;
+  --status-pending-text: #EF9F27;
+}
+
+/* ─── Light Mode (L4 — Sage Mist) ─── */
+html.light {
+  --bg-page: #E6E8E4;
+  --bg-sidebar: #E2E4E0;
+  --sidebar-border: #B4BAAC;
+  --bg-card: #F0F1EE;
+  --bg-card-inset: #E4E6E0;
+  --border-default: #B4BAAC;
+  --border-strong: #9CA394;
+
+  --text-primary: #181B15;
+  --text-secondary: #5C6456;
+  --text-muted: #7C8376;
+
+  --accent-primary: #2E8FA3;
+  --accent-hover: #267A8C;
+  --accent-on-primary: #FFFFFF;
+  --accent-subtle-bg: #DCEBEE;
+
+  --status-success-bg: #DBE6D9;
+  --status-success-text: #27500A;
+  --status-failed-bg: #E9D8D8;
+  --status-failed-text: #A32D2D;
+  --status-pending-bg: #F2E6CC;
+  --status-pending-text: #854F0B;
+}
+
 @layer utilities {
-  .font-serif {
-    font-family: var(--font-playfair), Georgia, Cambria, "Times New Roman", Times, serif;
+  .font-sans {
+    font-family: var(--font-sans);
+  }
+  .font-mono {
+    font-family: var(--font-mono);
   }
 }
 
-.bg-dots {
-  background-image: radial-gradient(#E5DFD5 1.5px, transparent 1.5px);
-  background-size: 16px 16px;
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-page);
+  color: var(--text-primary);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-body {
-  background-color: #FAF7F2;
-  color: #2C2622;
+/* Dot grid for canvas / empty areas */
+.bg-dots {
+  background-image: radial-gradient(var(--border-default) 1.5px, transparent 1.5px);
+  background-size: 20px 20px;
 }
+
+/* Subtle content band for empty screens */
+.page-content-band {
+  background-color: var(--bg-card-inset);
+  border-top: 1px solid var(--sidebar-border);
+  border-bottom: 1px solid var(--sidebar-border);
+}
+
+/* ReactFlow overrides */
+.react-flow {
+  background-color: var(--bg-page) !important;
+  font-family: var(--font-sans) !important;
+}
+.react-flow__controls {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
+  border-radius: 10px !important;
+  overflow: hidden;
+  border: 1px solid var(--border-default) !important;
+  background-color: var(--bg-card) !important;
+}
+.react-flow__controls-button {
+  background-color: var(--bg-card) !important;
+  border-bottom: 1px solid var(--border-default) !important;
+  color: var(--text-secondary) !important;
+  fill: var(--text-secondary) !important;
+}
+.react-flow__controls-button:hover {
+  background-color: var(--bg-card-inset) !important;
+  color: var(--text-primary) !important;
+  fill: var(--text-primary) !important;
+}
+.react-flow__minimap {
+  background-color: var(--bg-sidebar) !important;
+  border: 1px solid var(--border-default) !important;
+  border-radius: 10px !important;
+  overflow: hidden;
+}
+.react-flow__edge-path {
+  stroke: var(--border-strong) !important;
+  stroke-width: 1.5 !important;
+}
+.react-flow__edge-text {
+  fill: var(--text-secondary) !important;
+  font-size: 10px !important;
+  font-weight: 500 !important;
+  font-family: var(--font-sans) !important;
+}
+.react-flow__edge-textbg {
+  fill: var(--bg-sidebar) !important;
+  rx: 4;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar          { width: 6px; height: 6px; }
+::-webkit-scrollbar-track    { background: var(--bg-page); }
+::-webkit-scrollbar-thumb    { background: var(--border-default); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+/* Select / option light-mode fix */
+html.light select option { background-color: var(--bg-card); color: var(--text-primary); }
