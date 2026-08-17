@@ -3,77 +3,81 @@
 import React, { memo } from 'react';
 import { Handle, Position, NodeProps, Node } from '@xyflow/react';
 import { NodeType } from '@repo/shared-types';
-import {
-  WorkflowFlowNodeData,
-  RUN_STATUS_STYLES,
-  NODE_TYPE_ICONS,
-} from '../../lib/flow-utils';
+import { WorkflowFlowNodeData, RUN_STATUS_STYLES } from '../../lib/flow-utils';
+import { getNodeTypeIcon } from '../icons/NodeIcons';
 
 const WorkflowFlowNode = memo(({ data }: NodeProps<Node<WorkflowFlowNodeData>>) => {
   const { workflowNode, runStatus, selected } = data;
-  const styles = RUN_STATUS_STYLES[runStatus];
+  const s = (runStatus && RUN_STATUS_STYLES[runStatus]) || RUN_STATUS_STYLES.idle;
   const type = workflowNode.type as NodeType;
 
-  return (
-    <div
-      className={`w-56 p-4 bg-white rounded-2xl border-2 shadow-md transition-all ${styles.border} ${styles.ring} ${
-        selected ? 'shadow-lg' : ''
-      }`}
-    >
-      <Handle type="target" position={Position.Left} className="!w-3 !h-3 !bg-[#C86D3B] !border-2 !border-white" />
+  const borderColor = selected ? 'var(--accent-primary)' : s.borderColor;
+  const boxShadow   = selected ? '0 0 0 2px var(--accent-subtle-bg)' : (s.ring ?? 'none');
 
-      <div className="flex items-center justify-between text-xs font-bold text-[#2C2622] mb-1 gap-2">
-        <span className="flex items-center gap-2 min-w-0">
-          <span>{NODE_TYPE_ICONS[type]}</span>
-          <span className="truncate">{workflowNode.config?.title || workflowNode.id}</span>
+  return (
+    <div style={{ width: 240, padding: 16, borderRadius: 16, border: `1px solid ${borderColor}`, boxShadow,
+      backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', transition: 'border-color 0.2s, box-shadow 0.2s', fontFamily: 'var(--font-sans)' }}>
+
+      <Handle type="target" position={Position.Left} style={{
+        width: 14, height: 14, backgroundColor: 'var(--accent-primary)',
+        border: '2px solid var(--bg-sidebar)', left: -8,
+      }} />
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 8 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <span style={{ padding: '6px', borderRadius: 8, backgroundColor: 'var(--bg-card-inset)', border: '1px solid var(--border-default)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            {getNodeTypeIcon(type, 'w-4 h-4')}
+          </span>
+          <span style={{ fontWeight: 500, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>
+            {workflowNode.config?.title || workflowNode.id}
+          </span>
         </span>
-        {runStatus !== 'idle' && styles.badge && (
-          <span className={`text-[9px] px-1.5 py-0.5 rounded border shrink-0 ${styles.badge}`}>
-            {styles.badgeText}
+        {runStatus && runStatus !== 'idle' && s.label && (
+          <span style={{ fontSize: 9, padding: '2px 8px', borderRadius: 999, fontWeight: 500, flexShrink: 0,
+            backgroundColor: s.badgeBg, color: s.badgeText, border: `1px solid ${s.badgeBorder}` }}>
+            {s.label}
           </span>
         )}
       </div>
 
-      <p className="text-[10px] text-[#8C827A] uppercase font-bold">{type}</p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingTop: 8,
+        borderTop: '1px solid var(--border-default)' }}>
+        <span style={{ fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em',
+          color: 'var(--accent-primary)', fontFamily: 'var(--font-mono)' }}>
+          {type}
+        </span>
+        {type === 'llm' && (
+          <span style={{ fontSize: 10, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', backgroundColor: 'var(--bg-card-inset)',
+            padding: '2px 8px', borderRadius: 6, border: '1px solid var(--border-default)',
+            maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {workflowNode.config?.model || 'gemini-2.5-flash'}
+          </span>
+        )}
+      </div>
 
-      {type === 'llm' && (
-        <p className="text-[10px] text-[#786E65] font-mono mt-1 truncate">
-          {workflowNode.config?.model || 'gemini-2.5-flash'}
-        </p>
-      )}
-
-      {type === 'condition' ? (
-        <>
-          <Handle
-            type="source"
-            position={Position.Right}
-            id="true"
-            className="!w-3 !h-3 !bg-emerald-500 !border-2 !border-white !top-[35%]"
-          />
-          <Handle
-            type="source"
-            position={Position.Right}
-            id="false"
-            className="!w-3 !h-3 !bg-rose-400 !border-2 !border-white !top-[65%]"
-          />
-          <div className="text-[9px] text-[#8C827A] mt-2 space-y-0.5">
-            <div className="text-emerald-600">→ true</div>
-            <div className="text-rose-500">→ false</div>
-          </div>
-        </>
-      ) : (
-        <Handle
-          type="source"
-          position={Position.Right}
-          className="!w-3 !h-3 !bg-white !border-2 !border-[#A89F91]"
-        />
+      {type === 'condition' ? (<>
+        <Handle type="source" position={Position.Right} id="true" style={{
+          width: 14, height: 14, backgroundColor: 'var(--status-success-text)',
+          border: '2px solid var(--bg-sidebar)', right: -8, top: '35%',
+        }} />
+        <Handle type="source" position={Position.Right} id="false" style={{
+          width: 14, height: 14, backgroundColor: 'var(--status-failed-text)',
+          border: '2px solid var(--bg-sidebar)', right: -8, top: '65%',
+        }} />
+        <div style={{ fontSize: 10, marginTop: 8, fontFamily: 'var(--font-mono)', textAlign: 'right', paddingRight: 8 }}>
+          <div style={{ color: 'var(--status-success-text)', fontWeight: 500 }}>→ true (Yes)</div>
+          <div style={{ color: 'var(--status-failed-text)', fontWeight: 500 }}>→ false (No)</div>
+        </div>
+      </>) : (
+        <Handle type="source" position={Position.Right} style={{
+          width: 14, height: 14, backgroundColor: 'var(--text-secondary)',
+          border: '2px solid var(--bg-sidebar)', right: -8,
+        }} />
       )}
     </div>
   );
 });
 
 WorkflowFlowNode.displayName = 'WorkflowFlowNode';
-
-export const flowNodeTypes = {
-  workflow: WorkflowFlowNode,
-};
+export const flowNodeTypes = { workflow: WorkflowFlowNode };
