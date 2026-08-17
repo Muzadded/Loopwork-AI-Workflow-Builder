@@ -23,6 +23,7 @@ interface WorkflowStore {
   handleRun: (startPolling: (runId: string) => void) => Promise<void>;
   handleLoad: (id: string) => Promise<void>;
   handleNew: () => void;
+  handleCancelActiveRun: () => Promise<void>;
 }
 
 const initialWorkflow = createDefaultWorkflow();
@@ -39,7 +40,16 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
 
   setDefinition: (def) => set({ definition: def }),
   setSelectedNodeId: (id) => set({ selectedNodeId: id }),
-  setActiveRun: (run) => set({ activeRun: run }),
+  setActiveRun: (run) => {
+    let msg = get().statusMessage;
+    if (run) {
+      if (run.status === 'completed') msg = 'Run completed';
+      else if (run.status === 'failed') msg = 'Run stopped';
+      else if (run.status === 'awaiting_approval') msg = 'Awaiting approval';
+      else if (run.status === 'running' || run.status === 'pending') msg = 'Run in progress';
+    }
+    set({ activeRun: run, statusMessage: msg });
+  },
   setStatusMessage: (msg) => set({ statusMessage: msg }),
 
   refreshWorkflowList: async () => {
@@ -114,5 +124,16 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       activeRun: null,
       statusMessage: 'New draft workflow',
     });
+  },
+
+  handleCancelActiveRun: async () => {
+    const { activeRun } = get();
+    if (!activeRun?.id) return;
+    try {
+      const updated = await api.cancelRun(activeRun.id);
+      set({ activeRun: updated, isRunning: false, statusMessage: 'Run cancelled' });
+    } catch (err) {
+      set({ statusMessage: err instanceof Error ? err.message : 'Cancel failed' });
+    }
   },
 }));
