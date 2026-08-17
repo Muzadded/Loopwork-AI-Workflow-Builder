@@ -73,6 +73,8 @@ export const api = {
 
   getRun: (runId: string) => request<WorkflowRunResponse>(`/runs/${runId}`),
 
+  cancelRun: (runId: string) => request<WorkflowRunResponse>(`/runs/${runId}/cancel`, { method: 'POST' }),
+
   getWorkflowRuns: (workflowId: string) =>
     request<WorkflowRunResponse[]>(`/workflows/${workflowId}/runs`),
 

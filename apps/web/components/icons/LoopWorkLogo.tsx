@@ -96,16 +96,18 @@ export const LoopWorkLogo: React.FC<LoopWorkLogoProps> = ({
     );
   }
 
+  const fontSize = `${Math.max(22, Math.round(size * 0.68))}px`;
+
   return (
-    <div className={`inline-flex items-center gap-3 ${className}`}>
+    <div className={`inline-flex items-center gap-3.5 ${className}`}>
       <LoopWorkNodeIcon mode={mode} size={size} />
       <span
         style={{
           color: textColor,
           fontWeight: 500,
-          fontSize: '20px',
+          fontSize: fontSize,
           letterSpacing: '-0.02em',
-          fontFamily: 'var(--font-geist-sans), system-ui, sans-serif',
+          fontFamily: 'var(--font-sans), Inter, system-ui, sans-serif',
         }}
       >
         LoopWork

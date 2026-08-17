@@ -6,6 +6,10 @@ import { ObservabilityDashboard } from '../components/ObservabilityDashboard';
 import { VisualCanvasView } from '../components/VisualCanvasView';
 import { RunTraceView } from '../components/RunTraceView';
 import { LoopWorkLogo, LoopWorkNodeIcon } from '../components/icons/LoopWorkLogo';
+import { AuthModal } from '../components/auth/AuthModal';
+import { AuthScreen } from '../components/auth/AuthScreen';
+import { UserDropdown } from '../components/auth/UserDropdown';
+import { useAuthStore } from '../store/auth-store';
 import { useRunPolling } from '../lib/use-run-polling';
 import { useWorkflowStore } from '../store/workflow-store';
 import { api } from '../lib/api';
@@ -33,6 +37,7 @@ function useTheme() {
 }
 
 export default function Home() {
+  const isAuthenticated   = useAuthStore((s) => s.isAuthenticated);
   const [activeNav, setActiveNav] = useState<'workflows' | 'history' | 'dashboard' | 'settings'>('workflows');
   const { isDark, toggle: toggleTheme } = useTheme();
 
@@ -54,10 +59,14 @@ export default function Home() {
   const handleNew         = useWorkflowStore((s) => s.handleNew);
   const { startPolling, stopPolling } = useRunPolling(setActiveRun);
 
-  useEffect(() => { if (activeNav === 'workflows') refreshWorkflowList(); }, [activeNav, refreshWorkflowList]);
+  useEffect(() => { if (activeNav === 'workflows' && isAuthenticated) refreshWorkflowList(); }, [activeNav, isAuthenticated, refreshWorkflowList]);
 
   const onRun = useCallback(async () => { await handleRun(startPolling); setActiveNav('history'); }, [handleRun, startPolling]);
   const onRunAgain = useCallback(async () => { await handleRun(startPolling); }, [handleRun, startPolling]);
+
+  if (!isAuthenticated) {
+    return <AuthScreen isDark={isDark} toggleTheme={toggleTheme} />;
+  }
 
   const navItems = [
     { id: 'dashboard', label: 'METRICS',  icon: Activity },
@@ -131,36 +140,29 @@ export default function Home() {
         <header className="h-16 px-8 flex justify-between items-center z-10 shrink-0"
           style={{ backgroundColor: 'var(--bg-sidebar)', borderBottom: '1px solid var(--sidebar-border)' }}>
           <div className="flex items-center gap-4">
-            <LoopWorkLogo mode={isDark ? 'dark' : 'light'} size={28} />
+            <LoopWorkLogo mode={isDark ? 'dark' : 'light'} size={36} />
             <span className="text-[10px] font-medium px-2.5 py-0.5 rounded-full uppercase tracking-widest"
               style={{ backgroundColor: 'var(--accent-subtle-bg)', color: 'var(--accent-primary)', border: '1px solid var(--accent-primary)', opacity: 0.8 }}>
               Enterprise v2.0
             </span>
             {statusMessage && (
-              <div className="flex items-center gap-2 text-xs px-3.5 py-1.5 rounded-lg"
+              <div className="flex items-center gap-2 text-xs px-3.5 py-1.5 rounded-lg font-sans font-medium"
                 style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}>
-                <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: 'var(--accent-primary)' }} />
+                <span className={`w-2 h-2 rounded-full ${statusMessage.includes('progress') || statusMessage.includes('started') ? 'animate-pulse' : ''}`}
+                  style={{
+                    backgroundColor: statusMessage.includes('stopped') || statusMessage.includes('failed')
+                      ? 'var(--status-failed-text)'
+                      : statusMessage.includes('completed')
+                      ? 'var(--status-success-text)'
+                      : 'var(--accent-primary)'
+                  }}
+                />
                 <span>{statusMessage}</span>
               </div>
             )}
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={handleSave} disabled={isSaving || isRunning}
-              className="px-4 py-2 text-xs font-semibold rounded-xl transition-all disabled:opacity-40"
-              style={{ color: 'var(--text-primary)', border: '1px solid var(--border-strong)', backgroundColor: 'transparent' }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-card-inset)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
-            >
-              {isSaving ? 'Saving...' : 'Save Draft'}
-            </button>
-            <button onClick={onRun} disabled={isSaving || isRunning}
-              className="px-5 py-2 text-[13px] font-medium rounded-xl transition-all active:scale-95 disabled:opacity-40 flex items-center gap-1.5"
-              style={{ backgroundColor: 'var(--accent-primary)', color: 'var(--accent-on-primary)' }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-hover)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-primary)'; }}
-            >
-              {isRunning ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Executing...</> : <><Zap className="w-3.5 h-3.5 fill-current" /> Execute Run</>}
-            </button>
+            <UserDropdown />
           </div>
         </header>
 
@@ -224,6 +226,9 @@ export default function Home() {
           )}
         </main>
       </div>
+
+      {/* Global Auth Modal */}
+      <AuthModal />
     </div>
   );
 }
