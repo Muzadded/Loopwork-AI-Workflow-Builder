@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Clock, Zap, ShieldAlert, Check, X, BookOpen, Loader2 } from 'lucide-react';
+import { Clock, Zap, ShieldAlert, Check, X, BookOpen, Loader2, Square } from 'lucide-react';
 import { ApprovalItem, RunStepResult, WorkflowRunResponse } from '@repo/shared-types';
 import { api } from '../lib/api';
 import { getNodeTypeIcon } from './icons/NodeIcons';
@@ -50,6 +50,20 @@ export const RunTraceView: React.FC<RunTraceViewProps> = ({ runData, onRunAgain,
     catch (err) { alert(String(err)); }
     finally { setResolving(false); }
   }, [pendingApproval, runData?.id, onRunUpdated]);
+
+  const [cancelling, setCancelling] = useState(false);
+  const handleCancelRun = useCallback(async () => {
+    if (!runData?.id) return;
+    setCancelling(true);
+    try {
+      const updated = await api.cancelRun(runData.id);
+      onRunUpdated?.(updated);
+    } catch (err) {
+      alert(String(err));
+    } finally {
+      setCancelling(false);
+    }
+  }, [runData?.id, onRunUpdated]);
 
   const status = runData?.status ?? 'pending';
   const steps  = runData?.steps  ?? [];
@@ -117,6 +131,15 @@ export const RunTraceView: React.FC<RunTraceViewProps> = ({ runData, onRunAgain,
               </React.Fragment>
             ))}
           </div>
+          {(status === 'running' || status === 'pending' || status === 'awaiting_approval') && (
+            <button onClick={handleCancelRun} disabled={cancelling}
+              style={{ padding: '8px 16px', fontSize: 12, fontWeight: 500, borderRadius: 12, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 6, backgroundColor: 'var(--status-failed-bg)',
+                color: 'var(--status-failed-text)', border: '1px solid var(--status-failed-text)', opacity: cancelling ? 0.5 : 1, fontFamily: 'var(--font-sans)' }}>
+              {cancelling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Square className="w-3.5 h-3.5" style={{ fill: 'currentColor' }} />}
+              Stop Run
+            </button>
+          )}
           {onRunAgain && (
             <button onClick={onRunAgain} disabled={isRunning} style={{ ...ctaBtn, opacity: isRunning ? 0.4 : 1 }}>
               {isRunning ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Starting…</> : <><Zap className="w-3.5 h-3.5" /> Re-run Pipeline</>}

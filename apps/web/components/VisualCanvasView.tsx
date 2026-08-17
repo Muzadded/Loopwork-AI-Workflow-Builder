@@ -121,27 +121,136 @@ function VisualCanvasInner({ definition, savedWorkflowId, workflows, activeRun, 
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center' }}>
-          <select value={savedWorkflowId ?? ''} onChange={(e) => e.target.value ? onLoadWorkflow(e.target.value) : onNewWorkflow()}
-            style={{ fontSize: 12, ...insetStyle, border: '1px solid var(--border-strong)', color: 'var(--text-primary)', borderRadius: 12, padding: '8px 12px', maxWidth: 180, outline: 'none' }}>
-            <option value="">— Select Saved —</option>
-            {workflows.map((wf) => <option key={wf.id} value={wf.id}>{wf.name}</option>)}
-          </select>
-          {[
-            { label: 'New Canvas', icon: <Plus className="w-3.5 h-3.5" />, onClick: onNewWorkflow },
-            { label: isSaving ? 'Saving…' : 'Save Workflow', icon: <Save className="w-3.5 h-3.5" />, onClick: onSave, disabled: isSaving || isRunning },
-          ].map(({ label, icon, onClick, disabled }) => (
-            <button key={label} onClick={onClick} disabled={disabled}
-              style={{ padding: '8px 14px', fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', backgroundColor: 'transparent',
-                border: '1px solid var(--border-strong)', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: disabled ? 0.4 : 1 }}>
-              {icon} {label}
+        {/* Right Group: Organized into navigation and action clusters */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+          {/* Cluster 1: Navigation Actions (8px gap) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <select
+              value={savedWorkflowId ?? ''}
+              onChange={(e) => (e.target.value ? onLoadWorkflow(e.target.value) : onNewWorkflow())}
+              style={{
+                fontSize: 12,
+                fontWeight: 500,
+                ...insetStyle,
+                border: '1px solid var(--border-strong)',
+                color: 'var(--text-primary)',
+                borderRadius: 12,
+                padding: '8px 12px',
+                maxWidth: 180,
+                outline: 'none',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-sans)',
+              }}
+            >
+              <option value="">— Select Saved —</option>
+              {workflows.map((wf) => (
+                <option key={wf.id} value={wf.id}>
+                  {wf.name}
+                </option>
+              ))}
+            </select>
+
+            <button
+              onClick={onNewWorkflow}
+              style={{
+                padding: '8px 14px',
+                fontSize: 12,
+                fontWeight: 500,
+                color: 'var(--text-primary)',
+                backgroundColor: 'transparent',
+                border: '1px solid var(--border-strong)',
+                borderRadius: 12,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontFamily: 'var(--font-sans)',
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--bg-card-inset)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              New Canvas
             </button>
-          ))}
-          <button onClick={onRun} disabled={isSaving || isRunning}
-            style={{ padding: '8px 20px', fontSize: 13, fontWeight: 500, backgroundColor: 'var(--accent-primary)', color: 'var(--accent-on-primary)',
-              border: 'none', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: (isSaving || isRunning) ? 0.4 : 1 }}>
-            {isRunning ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Executing…</> : <><Zap className="w-3.5 h-3.5" style={{ fill: 'var(--accent-on-primary)' }} /> Run Pipeline</>}
-          </button>
+          </div>
+
+          {/* Visual Divider Line */}
+          <div style={{ width: 1, height: 22, backgroundColor: 'var(--border-strong)' }} />
+
+          {/* Cluster 2: Action Controls (8px gap) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              onClick={onSave}
+              disabled={isSaving || isRunning}
+              style={{
+                padding: '8px 14px',
+                fontSize: 12,
+                fontWeight: 500,
+                color: 'var(--text-primary)',
+                backgroundColor: 'transparent',
+                border: '1px solid var(--border-strong)',
+                borderRadius: 12,
+                cursor: isSaving || isRunning ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                opacity: isSaving || isRunning ? 0.4 : 1,
+                fontFamily: 'var(--font-sans)',
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                if (!isSaving && !isRunning) e.currentTarget.style.backgroundColor = 'var(--bg-card-inset)';
+              }}
+              onMouseLeave={(e) => {
+                if (!isSaving && !isRunning) e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >
+              {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              {isSaving ? 'Saving…' : 'Save Workflow'}
+            </button>
+
+            <button
+              onClick={onRun}
+              disabled={isSaving || isRunning}
+              style={{
+                padding: '8px 18px',
+                fontSize: 12,
+                fontWeight: 600,
+                backgroundColor: 'var(--accent-primary)',
+                color: 'var(--accent-on-primary)',
+                border: 'none',
+                borderRadius: 12,
+                cursor: isSaving || isRunning ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                opacity: isSaving || isRunning ? 0.4 : 1,
+                fontFamily: 'var(--font-sans)',
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                if (!isSaving && !isRunning) e.currentTarget.style.backgroundColor = 'var(--accent-hover)';
+              }}
+              onMouseLeave={(e) => {
+                if (!isSaving && !isRunning) e.currentTarget.style.backgroundColor = 'var(--accent-primary)';
+              }}
+            >
+              {isRunning ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Executing…
+                </>
+              ) : (
+                <>
+                  <Zap className="w-3.5 h-3.5 fill-current" /> Run Pipeline
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
