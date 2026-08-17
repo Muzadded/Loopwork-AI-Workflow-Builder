@@ -64,6 +64,28 @@ export class WorkflowRunsService {
     this.logger.log(`Updated Run [${runId}] status => ${status}`);
   }
 
+  async cancelRun(runId: string) {
+    const run = await this.getRun(runId);
+    if (run.status === 'completed' || run.status === 'failed') {
+      return run;
+    }
+
+    await this.updateRunStatus(runId, 'failed', { finishedAt: new Date() });
+
+    const pendingApprovals = await this.prisma.approval.findMany({
+      where: { runId, status: 'pending' },
+    });
+    for (const app of pendingApprovals) {
+      await this.prisma.approval.update({
+        where: { id: app.id },
+        data: { status: 'rejected', resolvedAt: new Date() },
+      });
+    }
+
+    this.logger.log(`Cancelled Workflow Run [${runId}]`);
+    return this.getRun(runId);
+  }
+
   async upsertStepResult(runId: string, step: RunStepResult) {
     await this.prisma.runStep.upsert({
       where: {
