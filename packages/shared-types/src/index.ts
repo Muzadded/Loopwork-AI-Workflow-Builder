@@ -12,6 +12,8 @@ export interface WorkflowEdge {
   id: string;
   source: string;
   target: string;
+  sourceHandle?: string;
+  conditionBranch?: 'true' | 'false';
   condition?: string;
   edgeType?: 'default' | 'confidence_threshold';
 }

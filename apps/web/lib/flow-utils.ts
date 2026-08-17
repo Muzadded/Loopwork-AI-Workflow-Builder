@@ -42,7 +42,7 @@ export function definitionToFlow(
       if (stepStatusMap.has(n.id)) runStatus = stepStatusMap.get(n.id)!;
       else if (activeRun.status === 'running' || activeRun.status === 'pending') runStatus = 'pending';
     }
-    return { id: n.id, type: 'workflow', position: n.position, data: { workflowNode: n, runStatus: runStatus as RunStatus, selected: selectedNodeId === n.id } };
+    return { id: n.id, type: 'workflow', position: n.position ?? { x: 100, y: 100 }, data: { workflowNode: n, runStatus: runStatus as RunStatus, selected: selectedNodeId === n.id } };
   });
 
   const edges: Edge[] = definition.edges.map((e) => {

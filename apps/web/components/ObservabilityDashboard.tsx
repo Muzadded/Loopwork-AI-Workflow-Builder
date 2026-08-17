@@ -101,7 +101,7 @@ export const ObservabilityDashboard: React.FC<ObservabilityDashboardProps> = ({ 
       {/* Pending Approvals */}
       {pendingApprovals.length > 0 && (
         <div className="rounded-2xl p-6 space-y-4"
-          style={{ backgroundColor: 'var(--status-pending-bg)', border: '1px solid var(--status-pending-text)', borderOpacity: 0.4 }}>
+          style={{ backgroundColor: 'var(--status-pending-bg)', border: '1px solid var(--status-pending-text)' }}>
           <div className="flex items-center gap-2.5 font-bold text-lg" style={{ color: 'var(--status-pending-text)' }}>
             <AlertTriangle className="w-5 h-5 animate-pulse" />
             Pending Human Approvals ({pendingApprovals.length})
