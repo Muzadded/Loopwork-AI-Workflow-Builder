@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { Clock, Zap, ShieldAlert, Check, X, BookOpen, Loader2 } from 'lucide-react';
 import { ApprovalItem, RunStepResult, WorkflowRunResponse } from '@repo/shared-types';
 import { api } from '../lib/api';
+import { getNodeTypeIcon } from './icons/NodeIcons';
 
 interface RunTraceViewProps {
   runData?: WorkflowRunResponse | null;
@@ -11,212 +13,189 @@ interface RunTraceViewProps {
   onRunUpdated?: (run: WorkflowRunResponse) => void;
 }
 
-const NODE_ICONS: Record<string, string> = {
-  trigger: '⚡',
-  llm: '🤖',
-  condition: '🔀',
-  action: '📝',
-  approval: '🛡️',
-};
-
-function stepBorderClass(status: RunStepResult['status'], runStatus: string, index: number, total: number) {
-  if (status === 'failed') return 'border-rose-500';
-  if (status === 'success') return 'border-emerald-500';
-  if (runStatus === 'running' && index === total - 1) return 'border-[#C86D3B]';
-  return 'border-[#EAE4D9]';
+function stepBorderColor(status: RunStepResult['status'], runStatus: string, index: number, total: number): string {
+  if (status === 'failed')  return 'var(--status-failed-text)';
+  if (status === 'success') return 'var(--status-success-text)';
+  if (runStatus === 'running' && index === total - 1) return 'var(--accent-primary)';
+  return 'var(--border-default)';
 }
 
-function stepStatusLabel(status: RunStepResult['status'], latencyMs?: number) {
-  if (status === 'failed') return '✗ Failed';
+function stepLabel(status: RunStepResult['status'], latencyMs?: number) {
+  if (status === 'failed')  return '✗ Failed';
   if (status === 'retrying') return '↻ Retrying';
   if (status === 'success') return `✓ ${latencyMs ?? 0}ms`;
   return '⋯ Pending';
 }
 
-export const RunTraceView: React.FC<RunTraceViewProps> = ({
-  runData,
-  onRunAgain,
-  isRunning,
-  onRunUpdated,
-}) => {
-  const [expandedStepId, setExpandedStepId] = useState<string | null>(null);
-  const [pendingApproval, setPendingApproval] = useState<ApprovalItem | null>(null);
+export const RunTraceView: React.FC<RunTraceViewProps> = ({ runData, onRunAgain, isRunning, onRunUpdated }) => {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [pendingApproval, setPending] = useState<ApprovalItem | null>(null);
   const [resolving, setResolving] = useState(false);
 
   useEffect(() => {
-    if (runData?.steps?.length) {
-      setExpandedStepId(runData.steps[runData.steps.length - 1].nodeId);
-    }
+    if (runData?.steps?.length) setExpandedId(runData.steps[runData.steps.length - 1].nodeId);
   }, [runData?.id, runData?.steps?.length]);
 
   useEffect(() => {
-    if (runData?.status !== 'awaiting_approval' || !runData.id) {
-      setPendingApproval(null);
-      return;
-    }
-
+    if (runData?.status !== 'awaiting_approval' || !runData.id) { setPending(null); return; }
     let cancelled = false;
-    api.getPendingApprovals().then((items) => {
-      if (cancelled) return;
-      setPendingApproval(items.find((a) => a.runId === runData.id) ?? null);
-    });
-    return () => {
-      cancelled = true;
-    };
+    api.getPendingApprovals().then((items) => { if (!cancelled) setPending(items.find((a) => a.runId === runData.id) ?? null); });
+    return () => { cancelled = true; };
   }, [runData?.id, runData?.status]);
 
-  const resolveApproval = useCallback(
-    async (decision: 'approve' | 'reject') => {
-      if (!pendingApproval || !runData?.id) return;
-      setResolving(true);
-      try {
-        await api.resolveApproval(pendingApproval.id, decision);
-        const run = await api.getRun(runData.id);
-        onRunUpdated?.(run);
-      } catch (err) {
-        alert(String(err));
-      } finally {
-        setResolving(false);
-      }
-    },
-    [pendingApproval, runData?.id, onRunUpdated],
-  );
+  const resolveApproval = useCallback(async (decision: 'approve' | 'reject') => {
+    if (!pendingApproval || !runData?.id) return;
+    setResolving(true);
+    try { await api.resolveApproval(pendingApproval.id, decision); onRunUpdated?.(await api.getRun(runData.id)); }
+    catch (err) { alert(String(err)); }
+    finally { setResolving(false); }
+  }, [pendingApproval, runData?.id, onRunUpdated]);
 
-  const runId = runData?.id;
   const status = runData?.status ?? 'pending';
-  const steps = runData?.steps ?? [];
+  const steps  = runData?.steps  ?? [];
 
-  if (!runData) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center h-[calc(100vh-65px)] bg-[#FAF7F2] text-center p-12">
-        <h2 className="text-xl font-serif font-bold text-[#2C2622] mb-2">No run selected</h2>
-        <p className="text-sm text-[#786E65] mb-6">
-          Save a workflow and click Run, or trigger a run from the dashboard.
+  const cardStyle:  React.CSSProperties = { backgroundColor: 'var(--bg-card)',    border: '1px solid var(--border-default)' };
+  const insetStyle: React.CSSProperties = { backgroundColor: 'var(--bg-card-inset)', border: '1px solid var(--border-default)' };
+  const sidebarStyle: React.CSSProperties = { backgroundColor: 'var(--bg-sidebar)', borderLeft: '1px solid var(--sidebar-border)' };
+
+  const ctaBtn: React.CSSProperties = {
+    padding: '8px 20px', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6,
+    backgroundColor: 'var(--accent-primary)', color: 'var(--accent-on-primary)', border: 'none', borderRadius: 12, cursor: 'pointer',
+  };
+
+  /* ── Empty State ── */
+  if (!runData) return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-page)' }}>
+      {/* subtle band */}
+      <div style={{ width: '100%', padding: '24px 32px', backgroundColor: 'var(--bg-card-inset)', borderBottom: '1px solid var(--sidebar-border)' }}>
+        <p style={{ fontSize: 11, fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--text-muted)' }}>
+          Execution Trace
+        </p>
+      </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 48, textAlign: 'center' }}>
+        <div style={{ width: 64, height: 64, borderRadius: 16, ...cardStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+          <Clock className="w-8 h-8" style={{ color: 'var(--accent-primary)' }} />
+        </div>
+        <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>No Execution Run Selected</h2>
+        <p style={{ fontSize: 12, color: 'var(--text-secondary)', maxWidth: 360, lineHeight: 1.7, marginBottom: 24 }}>
+          Select an execution run from the Observability Dashboard or trigger a new pipeline run from the canvas.
         </p>
         {onRunAgain && (
-          <button
-            onClick={onRunAgain}
-            disabled={isRunning}
-            className="px-5 py-2 text-xs font-bold text-white bg-[#C86D3B] hover:bg-[#B05B2A] rounded-lg disabled:opacity-50"
-          >
-            {isRunning ? 'Starting…' : '► Run Workflow'}
+          <button onClick={onRunAgain} disabled={isRunning} style={{ ...ctaBtn, opacity: isRunning ? 0.4 : 1 }}>
+            {isRunning ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Starting Run…</> : <><Zap className="w-3.5 h-3.5" /> Execute Workflow</>}
           </button>
         )}
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
-    <div className="flex-1 flex flex-col h-[calc(100vh-65px)] overflow-hidden bg-[#FAF7F2]">
-      <div className="h-16 bg-[#FFFFFF] border-b border-[#EAE4D9] px-6 flex justify-between items-center z-10 select-none">
-        <span className="font-mono text-xs text-[#786E65]">Execution ID: {runId}</span>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: 'calc(100vh - 65px)', overflow: 'hidden', backgroundColor: 'var(--bg-page)', color: 'var(--text-primary)' }}>
 
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-6 text-xs bg-[#FAF7F2] px-4 py-2 rounded-xl border border-[#EAE4D9]">
-            <div>
-              <span className="text-[10px] font-bold uppercase text-[#8C827A] block">TOTAL TIME</span>
-              <span className="font-mono font-bold text-[#C86D3B]">
-                {runData.totalLatencyMs != null ? `${runData.totalLatencyMs}ms` : '—'}
-              </span>
-            </div>
-            <div className="h-6 w-px bg-[#EAE4D9]" />
-            <div>
-              <span className="text-[10px] font-bold uppercase text-[#8C827A] block">TOTAL COST</span>
-              <span className="font-mono font-bold text-[#2C2622]">
-                ${(runData.totalCostUsd ?? 0).toFixed(4)}
-              </span>
-            </div>
-            <div className="h-6 w-px bg-[#EAE4D9]" />
-            <div>
-              <span className="text-[10px] font-bold uppercase text-[#8C827A] block">STATUS</span>
-              <span className="font-bold text-[#C86D3B]">
-                {status === 'running' || status === 'pending'
-                  ? '🔄 RUNNING'
-                  : status === 'completed'
-                    ? '✓ COMPLETED'
-                    : status.toUpperCase()}
-              </span>
-            </div>
+      {/* Header */}
+      <div style={{ height: 64, ...sidebarStyle, borderLeft: 'none', borderBottom: '1px solid var(--sidebar-border)', padding: '0 24px',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, zIndex: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: 'var(--font-sans)',
+            ...insetStyle, padding: '4px 10px', borderRadius: 6, color: 'var(--text-secondary)' }}>RUN ID</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 500, color: 'var(--accent-primary)' }}>{runData.id}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          {/* Stats panel = card level */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 24, fontSize: 12, ...cardStyle, padding: '8px 16px', borderRadius: 12 }}>
+            {[
+              { label: 'TOTAL LATENCY', val: runData.totalLatencyMs != null ? `${runData.totalLatencyMs}ms` : '—' },
+              { label: 'AI COST',       val: `$${(runData.totalCostUsd ?? 0).toFixed(4)}` },
+              { label: 'STATUS',        val: status === 'running' || status === 'pending' ? '🔄 RUNNING' : status === 'completed' ? '✓ COMPLETED' : status.toUpperCase() },
+            ].map(({ label, val }, i) => (
+              <React.Fragment key={label}>
+                {i > 0 && <div style={{ width: 1, height: 24, backgroundColor: 'var(--border-default)' }} />}
+                <div>
+                  <span style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', fontFamily: 'var(--font-sans)', display: 'block' }}>{label}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 500, color: 'var(--accent-primary)' }}>{val}</span>
+                </div>
+              </React.Fragment>
+            ))}
           </div>
-
           {onRunAgain && (
-            <button
-              onClick={onRunAgain}
-              disabled={isRunning}
-              className="px-5 py-2 text-xs font-bold text-white bg-[#C86D3B] hover:bg-[#B05B2A] rounded-lg shadow-sm disabled:opacity-50"
-            >
-              {isRunning ? 'Starting…' : '► Run Again'}
+            <button onClick={onRunAgain} disabled={isRunning} style={{ ...ctaBtn, opacity: isRunning ? 0.4 : 1 }}>
+              {isRunning ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Starting…</> : <><Zap className="w-3.5 h-3.5" /> Re-run Pipeline</>}
             </button>
           )}
         </div>
       </div>
 
+      {/* Approval Banner */}
       {status === 'awaiting_approval' && pendingApproval && (
-        <div className="mx-6 mt-4 p-4 rounded-xl bg-amber-50 border border-amber-300 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <p className="text-sm font-bold text-amber-900">Awaiting human approval</p>
-            <p className="text-xs text-amber-800 mt-1">
-              {String(pendingApproval.payload?.reason || `Node ${pendingApproval.nodeId} needs review`)}
-            </p>
+        <div style={{ margin: '16px 24px 0', padding: 16, borderRadius: 16, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 16,
+          backgroundColor: 'var(--status-pending-bg)', border: '1px solid var(--status-pending-text)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <ShieldAlert className="w-5 h-5" style={{ color: 'var(--status-pending-text)' }} />
+            <div>
+              <p style={{ fontWeight: 700, color: 'var(--status-pending-text)', fontSize: 14 }}>Human Approval Required</p>
+              <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                {String(pendingApproval.payload?.reason || `Node ${pendingApproval.nodeId} needs review`)}
+              </p>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => resolveApproval('approve')}
-              disabled={resolving}
-              className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 rounded-lg disabled:opacity-50"
-            >
-              Approve & Continue
-            </button>
-            <button
-              onClick={() => resolveApproval('reject')}
-              disabled={resolving}
-              className="px-4 py-2 text-xs font-bold text-white bg-rose-600 rounded-lg disabled:opacity-50"
-            >
-              Reject
-            </button>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            {[
+              { label: 'Approve & Continue', icon: <Check className="w-3.5 h-3.5" />, decision: 'approve' as const,
+                bg: 'var(--status-success-bg)', color: 'var(--status-success-text)', border: 'var(--status-success-text)' },
+              { label: 'Reject Execution',   icon: <X className="w-3.5 h-3.5" />,     decision: 'reject' as const,
+                bg: 'var(--status-failed-bg)',  color: 'var(--status-failed-text)',  border: 'var(--status-failed-text)' },
+            ].map(({ label, icon, decision, bg, color, border }) => (
+              <button key={decision} onClick={() => resolveApproval(decision)} disabled={resolving}
+                style={{ padding: '8px 16px', fontSize: 12, fontWeight: 700, borderRadius: 12, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 6, backgroundColor: bg, color, border: `1px solid ${border}`, opacity: resolving ? 0.5 : 1 }}>
+                {icon} {label}
+              </button>
+            ))}
           </div>
         </div>
       )}
 
-      <div className="flex-1 flex overflow-hidden relative">
-        <div className="flex-1 bg-dots bg-[#FAF7F2] relative overflow-auto p-12 flex justify-center select-none">
-          <div className="relative w-80 space-y-4">
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
+        {/* Centre flow diagram */}
+        <div className="bg-dots" style={{ flex: 1, backgroundColor: 'var(--bg-page)', overflowY: 'auto', padding: 48, display: 'flex', justifyContent: 'center' }}>
+          <div style={{ width: 384, display: 'flex', flexDirection: 'column', gap: 16 }}>
             {steps.length === 0 && (
-              <div className="bg-[#FFFFFF] rounded-2xl border border-[#EAE4D9] p-6 text-center text-sm text-[#786E65]">
-                Waiting for steps…
+              <div style={{ ...cardStyle, borderRadius: 16, padding: 32, textAlign: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: 'var(--accent-primary)', margin: '0 auto 12px', animation: 'ping 1s infinite' }} />
+                Waiting for execution step stream...
               </div>
             )}
-            {steps.map((step, index) => (
+            {steps.map((step, i) => (
               <React.Fragment key={step.nodeId}>
-                {index > 0 && (
-                  <div className="w-full flex justify-center">
-                    <div
-                      className={`h-6 border-l-2 border-dashed ${
-                        step.status === 'success' ? 'border-emerald-500' : 'border-[#EAE4D9]'
-                      }`}
-                    />
+                {i > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <div style={{ height: 24, borderLeft: `2px dashed ${step.status === 'success' ? 'var(--status-success-text)' : 'var(--border-default)'}` }} />
                   </div>
                 )}
-                <div
-                  className={`bg-[#FFFFFF] rounded-2xl border-2 p-5 shadow-sm space-y-3 ${stepBorderClass(step.status, status, index, steps.length)}`}
-                >
-                  <div className="flex justify-between items-center text-xs font-bold text-[#2C2622]">
-                    <span className="flex items-center gap-2">
-                      <span>{NODE_ICONS[step.nodeType] ?? '•'}</span>
-                      {step.nodeId}
-                      <span className="text-[#8C827A] font-normal">({step.nodeType})</span>
+                <div style={{ borderRadius: 16, border: `1px solid ${stepBorderColor(step.status, status, i, steps.length)}`,
+                  backgroundColor: 'var(--bg-card)', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, fontWeight: 700 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                      <span style={{ padding: 6, borderRadius: 8, ...insetStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        {getNodeTypeIcon(step.nodeType, 'w-4 h-4')}
+                      </span>
+                      <span style={{ color: 'var(--text-primary)' }}>{step.nodeId}</span>
+                      <span style={{ fontSize: 10, color: 'var(--accent-primary)', fontFamily: 'monospace' }}>({step.nodeType})</span>
                     </span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#FAF7F2] border border-[#EAE4D9]">
-                      {stepStatusLabel(step.status, step.latencyMs)}
+                    <span style={{ fontSize: 10, fontFamily: 'monospace', padding: '4px 10px', borderRadius: 999, ...insetStyle, color: 'var(--text-secondary)', flexShrink: 0 }}>
+                      {stepLabel(step.status, step.latencyMs)}
                     </span>
                   </div>
                   {step.output && (
-                    <pre className="p-2.5 rounded-xl bg-[#FAF7F2] text-[10px] font-mono text-[#2C2622] border border-[#EAE4D9] overflow-x-auto max-h-32">
+                    <pre style={{ ...insetStyle, padding: 12, borderRadius: 12, fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', overflowX: 'auto', maxHeight: 144, lineHeight: 1.6 }}>
                       {JSON.stringify(step.output, null, 2)}
                     </pre>
                   )}
                   {step.error && (
-                    <p className="text-[11px] text-rose-600 font-mono">{step.error}</p>
+                    <p style={{ fontSize: 11, fontFamily: 'monospace', padding: 10, borderRadius: 12,
+                      backgroundColor: 'var(--status-failed-bg)', color: 'var(--status-failed-text)', border: '1px solid var(--status-failed-text)' }}>
+                      ⚠️ {step.error}
+                    </p>
                   )}
                 </div>
               </React.Fragment>
@@ -224,74 +203,81 @@ export const RunTraceView: React.FC<RunTraceViewProps> = ({
           </div>
         </div>
 
-        <div className="w-96 bg-[#FFFFFF] border-l border-[#EAE4D9] p-6 space-y-4 overflow-y-auto shadow-lg z-10">
-          <h3 className="font-serif font-bold text-lg text-[#2C2622] border-b border-[#EAE4D9] pb-4">
-            📖 Run Trace
-          </h3>
+        {/* Right Trace Inspector */}
+        <div style={{ width: 384, ...sidebarStyle, padding: 24, overflowY: 'auto', zIndex: 10, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ borderBottom: '1px solid var(--border-default)', paddingBottom: 16 }}>
+            <span style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--accent-primary)', fontFamily: 'var(--font-sans)', display: 'block' }}>
+              TELEMETRY LOGS
+            </span>
+            <h3 style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-primary)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-sans)' }}>
+              <BookOpen className="w-5 h-5" style={{ color: 'var(--accent-primary)' }} /> Execution Trace
+            </h3>
+          </div>
 
-          {steps.map((step, index) => {
-            const isExpanded = expandedStepId === step.nodeId;
+          {steps.map((step, i) => {
+            const exp = expandedId === step.nodeId;
             return (
-              <div
-                key={step.nodeId}
-                className={`rounded-xl border transition-all ${
-                  isExpanded
-                    ? 'border-[#C86D3B] bg-[#FFFFFF] p-4 shadow-sm'
-                    : 'border-[#EAE4D9] bg-[#FAF7F2] p-3 cursor-pointer hover:border-[#C86D3B]/50'
-                }`}
-                onClick={() => setExpandedStepId(isExpanded ? null : step.nodeId)}
-              >
-                <div className="flex justify-between items-center text-xs font-semibold text-[#2C2622]">
-                  <span>
-                    {index + 1}. {NODE_ICONS[step.nodeType]} {step.nodeId}
+              <div key={step.nodeId} onClick={() => setExpandedId(exp ? null : step.nodeId)}
+                style={{ borderRadius: 16, border: `1px solid ${exp ? 'var(--accent-primary)' : 'var(--border-default)'}`,
+                  backgroundColor: exp ? 'var(--bg-card)' : 'var(--bg-card-inset)',
+                  padding: exp ? 16 : 14, cursor: 'pointer', transition: 'all 0.15s' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{i + 1}.</span>
+                    {getNodeTypeIcon(step.nodeType, 'w-3.5 h-3.5')}
+                    {step.nodeId}
                   </span>
-                  <span className="text-[#8C827A] font-mono text-[10px]">
+                  <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', padding: '2px 8px', borderRadius: 999,
+                    backgroundColor: 'var(--bg-card-inset)', border: '1px solid var(--border-default)', color: 'var(--text-secondary)' }}>
                     {step.latencyMs != null ? `${step.latencyMs}ms` : step.status}
                   </span>
                 </div>
 
-                {isExpanded && (
-                  <div className="mt-3 space-y-3 text-[11px] border-t border-[#F7F2EA] pt-3">
+                {exp && (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-default)', display: 'flex', flexDirection: 'column', gap: 12, fontSize: 12 }}>
                     {step.input?.model && (
-                      <div>
-                        <span className="text-[10px] font-bold uppercase text-[#8C827A]">Model</span>
-                        <p className="font-mono text-[#C86D3B]">{step.input.model}</p>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', fontFamily: 'var(--font-sans)' }}>LLM MODEL</span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, ...insetStyle, padding: '2px 8px', borderRadius: 6, color: 'var(--accent-primary)' }}>{step.input.model}</span>
                       </div>
                     )}
                     {step.input?.prompt && (
                       <div>
-                        <span className="text-[10px] font-bold uppercase text-[#8C827A]">Prompt</span>
-                        <pre className="p-2 rounded-lg bg-[#FAF7F2] font-mono text-[10px] whitespace-pre-wrap mt-1">
+                        <span style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', fontFamily: 'var(--font-sans)', display: 'block', marginBottom: 6 }}>PROMPT PAYLOAD</span>
+                        <pre style={{ ...insetStyle, padding: 10, borderRadius: 12, fontFamily: 'var(--font-mono)', fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.6, color: 'var(--text-primary)' }}>
                           {String(step.input.prompt)}
                         </pre>
                       </div>
                     )}
                     {(step.tokensUsed != null || step.costUsd != null) && (
-                      <div className="grid grid-cols-2 gap-2 text-[10px]">
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                         {step.tokensUsed != null && (
-                          <div>
-                            <span className="text-[#8C827A] font-bold block">TOKENS</span>
-                            <span className="font-mono">{step.tokensUsed}</span>
+                          <div style={{ ...insetStyle, padding: 8, borderRadius: 12 }}>
+                            <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-secondary)', display: 'block' }}>TOKENS USED</span>
+                            <span style={{ fontFamily: 'monospace', color: 'var(--text-primary)' }}>{step.tokensUsed}</span>
                           </div>
                         )}
                         {step.costUsd != null && (
-                          <div>
-                            <span className="text-[#8C827A] font-bold block">COST</span>
-                            <span className="font-mono">${step.costUsd.toFixed(6)}</span>
+                          <div style={{ ...insetStyle, padding: 8, borderRadius: 12 }}>
+                            <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-secondary)', display: 'block' }}>STEP COST</span>
+                            <span style={{ fontFamily: 'monospace', color: 'var(--accent-primary)' }}>${step.costUsd.toFixed(6)}</span>
                           </div>
                         )}
                       </div>
                     )}
                     {step.output && (
                       <div>
-                        <span className="text-[10px] font-bold uppercase text-[#8C827A]">Output</span>
-                        <pre className="p-2 rounded-lg bg-[#FEF4EC] font-mono text-[10px] overflow-x-auto mt-1">
+                        <span style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', fontFamily: 'var(--font-sans)', display: 'block', marginBottom: 6 }}>OUTPUT RESULT</span>
+                        <pre style={{ ...insetStyle, padding: 10, borderRadius: 12, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-primary)', overflowX: 'auto', lineHeight: 1.6 }}>
                           {JSON.stringify(step.output, null, 2)}
                         </pre>
                       </div>
                     )}
                     {step.error && (
-                      <p className="text-rose-600 font-mono text-[10px]">{step.error}</p>
+                      <p style={{ fontFamily: 'monospace', fontSize: 10, padding: 8, borderRadius: 12,
+                        backgroundColor: 'var(--status-failed-bg)', color: 'var(--status-failed-text)', border: '1px solid var(--status-failed-text)' }}>
+                        {step.error}
+                      </p>
                     )}
                   </div>
                 )}
